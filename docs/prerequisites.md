@@ -109,3 +109,9 @@ dotnet run
 
 That's it. The first run will restore NuGet packages automatically.
 
+---
+
+## ✅ Ready to go!
+
+**→ [Start with Module 01: src/README.md](../src/README.md)**
+
