@@ -10,17 +10,47 @@ dotnet --version
 # Should output 9.x.x
 ```
 
-## 2. Azure Account and AI Foundry Project
+## 2. Provision Azure Resources
 
-You need an [Azure AI Foundry](https://ai.azure.com/) project with a model deployed.
+You have two options — pick one:
+
+### Option A: Bicep (recommended)
+
+The `infra/` folder contains a Bicep template that provisions everything you need:
+- **Azure AI Services** account (AI Foundry-compatible endpoint)
+- **gpt-4o-mini** model deployment
+- **Role assignment** so your user account has passwordless access
+
+```bash
+# 1. Log in and set your subscription
+az login
+az account set --subscription "<your-subscription-id>"
+
+# 2. Create a resource group
+az group create --name rg-tripbot --location eastus
+
+# 3. Get your user object ID (for the role assignment)
+az ad signed-in-user show --query id -o tsv
+
+# 4. Open infra/main.bicepparam and paste your ID into principalId = ''
+
+# 5. Deploy
+az deployment group create \
+  --resource-group rg-tripbot \
+  --template-file infra/main.bicep \
+  --parameters infra/main.bicepparam
+
+# 6. Copy the outputs — you'll need them in the next step
+```
+
+The deployment outputs `AZURE_OPENAI_ENDPOINT` and `AZURE_OPENAI_DEPLOYMENT_NAME` — copy these values for Step 4 below.
+
+### Option B: Manual (Azure AI Foundry portal)
 
 1. Sign in at the [Azure AI Foundry portal](https://ai.azure.com/)
 2. Create a project (or use an existing one)
-3. Deploy a model — `gpt-4o-mini` is recommended for these samples (low cost, fast)
-4. Copy your **project endpoint** from the project overview page. It looks like:
-   ```
-   https://ai-foundry-<resource>.services.ai.azure.com/api/projects/ai-project-<project>
-   ```
+3. Deploy a model — `gpt-4o-mini` is recommended (low cost, fast)
+4. Copy your **project endpoint** from the project overview page
 
 ## 3. Azure CLI
 

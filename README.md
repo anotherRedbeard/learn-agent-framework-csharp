@@ -17,15 +17,17 @@ The Microsoft Agent Framework is a library for building production-grade AI agen
 
 The framework abstracts away which LLM provider you use — swap from Azure OpenAI to any other provider without changing your agent code.
 
-## Prerequisites
+## Prerequisites & Getting Started
 
-See [docs/prerequisites.md](docs/prerequisites.md) for full setup instructions.
+1. Follow [docs/prerequisites.md](docs/prerequisites.md) for full setup instructions
+2. Deploy Azure resources with the provided Bicep: `az deployment group create --template-file infra/main.bicep --parameters infra/main.bicepparam`
+3. Once your credentials are configured → **[Start here: src/README.md](src/README.md)**
 
 **Quick checklist:**
 - [.NET 9 SDK](https://dotnet.microsoft.com/download)
-- An [Azure AI Foundry](https://ai.azure.com/) project with a model deployed (e.g., `gpt-4o-mini`)
 - Azure CLI logged in: `az login`
-- Environment variables set (see [.env.example](.env.example))
+- Azure resources deployed (see `infra/` or [docs/prerequisites.md](docs/prerequisites.md))
+- Credentials set via `dotnet user-secrets`
 
 ## Modules
 
