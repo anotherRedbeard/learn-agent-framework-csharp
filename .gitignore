@@ -1,0 +1,28 @@
+## .NET / C#
+bin/
+obj/
+*.user
+*.suo
+.vs/
+*.csproj.user
+
+## Rider
+.idea/
+
+## VSCode
+.vscode/
+
+## Environment / secrets
+.env
+*.env
+appsettings.*.json
+!appsettings.json
+
+## Build artifacts
+*.nupkg
+*.snupkg
+publish/
+
+## OS
+.DS_Store
+Thumbs.db

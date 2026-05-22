@@ -1,0 +1,85 @@
+@baseAddress = http://localhost:5000
+
+### Get AgentCard for weather agent (agent discovery)
+GET {{baseAddress}}/a2a/weather/v1/card
+
+### Ask the weather agent (non-streaming)
+# contextId maintains conversation history — reuse the same ID for follow-up questions
+POST {{baseAddress}}/a2a/weather/v1/message:stream
+Content-Type: application/json
+
+{
+  "message": {
+    "kind": "message",
+    "role": "user",
+    "parts": [
+      {
+        "kind": "text",
+        "text": "What is the weather like in Amsterdam this time of year?",
+        "metadata": {}
+      }
+    ],
+    "messageId": null,
+    "contextId": "weather-conversation-1"
+  }
+}
+
+### Follow-up in the same conversation (reuses contextId)
+POST {{baseAddress}}/a2a/weather/v1/message:stream
+Content-Type: application/json
+
+{
+  "message": {
+    "kind": "message",
+    "role": "user",
+    "parts": [
+      {
+        "kind": "text",
+        "text": "What about in December — should I pack a heavy coat?",
+        "metadata": {}
+      }
+    ],
+    "messageId": null,
+    "contextId": "weather-conversation-1"
+  }
+}
+
+### Ask the travel agent
+POST {{baseAddress}}/a2a/travel/v1/message:stream
+Content-Type: application/json
+
+{
+  "message": {
+    "kind": "message",
+    "role": "user",
+    "parts": [
+      {
+        "kind": "text",
+        "text": "I want to visit Amsterdam for 3 days. What are the must-see sights?",
+        "metadata": {}
+      }
+    ],
+    "messageId": null,
+    "contextId": "travel-conversation-1"
+  }
+}
+
+### Use the sequential workflow (weather agent → travel agent)
+POST {{baseAddress}}/a2a/trip-planning/v1/message:stream
+Content-Type: application/json
+
+{
+  "message": {
+    "kind": "message",
+    "role": "user",
+    "parts": [
+      {
+        "kind": "text",
+        "text": "Help me plan a trip to Amsterdam in October.",
+        "metadata": {}
+      }
+    ],
+    "messageId": null,
+    "contextId": "planning-conversation-1"
+  }
+}
