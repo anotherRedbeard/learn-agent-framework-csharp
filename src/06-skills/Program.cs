@@ -13,20 +13,21 @@ var deploymentName = Environment.GetEnvironmentVariable("AZURE_OPENAI_DEPLOYMENT
 // Skills are discovered from the 'skills' directory — each subdirectory with a SKILL.md is a skill.
 // Progressive disclosure: only names/descriptions (~100 tokens) load upfront;
 // full instructions load on demand when the agent actually needs them.
+// Also update the skills path comment
 var skillsProvider = new AgentSkillsProvider(
     Path.Combine(AppContext.BaseDirectory, "skills"));
 
 AIAgent agent = new AIProjectClient(new Uri(endpoint), new DefaultAzureCredential())
     .AsAIAgent(new ChatClientAgentOptions
     {
-        Name = "SkillsAgent",
-        ChatOptions = new() { Instructions = "You are a helpful HR assistant." },
+        Name = "TripBot",
+        ChatOptions = new() { Instructions = "You are TripBot, a travel planning assistant that specializes in helping travelers understand entry requirements and travel policies." },
         AIContextProviders = [skillsProvider],
     });
 
 AgentSession session = await agent.CreateSessionAsync();
 
-// The agent will automatically load and use the expense-report skill
-Console.WriteLine(await agent.RunAsync("I need to file an expense report for a $450 flight to Paris.", session));
+// The agent will automatically load and use the visa-requirements skill
+Console.WriteLine(await agent.RunAsync("I'm a US citizen planning a trip to Japan. Do I need a visa?", session));
 Console.WriteLine();
-Console.WriteLine(await agent.RunAsync("What is the spending limit per trip?", session));
+Console.WriteLine(await agent.RunAsync("What about visiting France and Italy on the same trip?", session));

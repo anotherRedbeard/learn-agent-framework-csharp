@@ -27,16 +27,16 @@ static string GetTime([Description("The city to get the time for.")] string city
 AIAgent agent = new AIProjectClient(new Uri(endpoint), new DefaultAzureCredential())
     .AsAIAgent(
         model: deploymentName,
-        instructions: "You are a helpful travel assistant.",
+        instructions: "You are TripBot, a travel planning assistant. Use tools to help users with weather and timing when planning trips.",
         tools: [
             AIFunctionFactory.Create(GetWeather),
             AIFunctionFactory.Create(GetTime)
         ]);
 
 // The agent will automatically call GetWeather when relevant
-Console.WriteLine(await agent.RunAsync("What is the weather like in Amsterdam?"));
+Console.WriteLine(await agent.RunAsync("I'm heading to Amsterdam next week. What's the weather like there?"));
 
 Console.WriteLine();
 
 // The agent may call multiple tools in a single turn
-Console.WriteLine(await agent.RunAsync("What's the weather and current time in Tokyo?"));
+Console.WriteLine(await agent.RunAsync("I'm flying to Tokyo tomorrow. What's the weather and local time there right now?"));

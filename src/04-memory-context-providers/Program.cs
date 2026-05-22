@@ -15,14 +15,14 @@ Console.WriteLine("=== Example 1: Default In-Memory History ===");
 AIAgent agent = new AIProjectClient(new Uri(endpoint), new DefaultAzureCredential())
     .AsAIAgent(
         model: deploymentName,
-        instructions: "You are a friendly assistant. Keep your answers brief.",
-        name: "MemoryAgent");
+        instructions: "You are TripBot, a travel planning assistant. Keep answers brief.",
+        name: "TripBot");
 
 AgentSession session = await agent.CreateSessionAsync();
 
-Console.WriteLine(await agent.RunAsync("Hello! What's the square root of 9?", session));
-Console.WriteLine(await agent.RunAsync("My name is Alice.", session));
-Console.WriteLine(await agent.RunAsync("What is my name?", session));  // Remembers "Alice"
+Console.WriteLine(await agent.RunAsync("I prefer window seats and always travel carry-on only.", session));
+Console.WriteLine(await agent.RunAsync("My home airport is Dallas Fort Worth.", session));
+Console.WriteLine(await agent.RunAsync("What do you know about my travel preferences so far?", session));  // Remembers preferences
 
 // --- Example 2: Custom ChatHistoryProvider ---
 // You can provide your own implementation to store history in a database,
@@ -32,13 +32,13 @@ Console.WriteLine("\n=== Example 2: Custom ChatHistoryProvider ===");
 AIAgent agentWithCustomHistory = new AIProjectClient(new Uri(endpoint), new DefaultAzureCredential())
     .AsAIAgent(new ChatClientAgentOptions
     {
-        ChatOptions = new() { Instructions = "You are a helpful assistant." },
+        ChatOptions = new() { Instructions = "You are TripBot, a travel planning assistant." },
         ChatHistoryProvider = new LoggingChatHistoryProvider()
     });
 
 AgentSession session2 = await agentWithCustomHistory.CreateSessionAsync();
-Console.WriteLine(await agentWithCustomHistory.RunAsync("My favorite color is blue.", session2));
-Console.WriteLine(await agentWithCustomHistory.RunAsync("What is my favorite color?", session2));
+Console.WriteLine(await agentWithCustomHistory.RunAsync("I need vegetarian meal options on my flights.", session2));
+Console.WriteLine(await agentWithCustomHistory.RunAsync("What dietary preference did I mention?", session2));
 
 // --- Custom ChatHistoryProvider implementation ---
 // Subclass ChatHistoryProvider and override two methods:

@@ -25,9 +25,9 @@ builder.AddEdge(uppercase, reverse).WithOutputFrom(reverse);
 var workflow = builder.Build();
 
 Console.WriteLine("=== Example 1: Deterministic Workflow ===");
-Console.WriteLine("Input: 'Hello, World!'");
+Console.WriteLine("Input: 'Paris, France!'");
 
-await using Run run = await InProcessExecution.RunAsync(workflow, "Hello, World!");
+await using Run run = await InProcessExecution.RunAsync(workflow, "Paris, France!");
 foreach (WorkflowEvent evt in run.NewEvents)
 {
     if (evt is ExecutorCompletedEvent executorComplete)
@@ -41,22 +41,22 @@ foreach (WorkflowEvent evt in run.NewEvents)
 //
 // AGENTS AS TOOLS (Module 07):
 //   - The MODEL decides which agent to call and when
-//   - Good for: flexible, open-ended tasks
+//   - Good for: flexible, open-ended tasks like "plan my trip"
 //   - Trade-off: execution order is non-deterministic
 //
 // WORKFLOWS:
 //   - The GRAPH defines what runs and in what order
-//   - Good for: document review pipelines, onboarding flows, approval chains
+//   - Good for: travel pipelines where order matters
 //   - Trade-off: more code, less flexibility
 
 Console.WriteLine("\n=== When to use Workflows ===");
 Console.WriteLine("Use workflows when the process structure is known ahead of time:");
-Console.WriteLine("  ✅ Document review: Write → Review → Revise → Approve (must be in order)");
-Console.WriteLine("  ✅ Onboarding: Collect info → Compliance check → Provision → Notify");
-Console.WriteLine("  ✅ Analytics: Gather data (parallel) → Merge → Generate report");
+Console.WriteLine("  ✅ Trip planning: Research destination → Check weather → Build itinerary → Confirm bookings");
+Console.WriteLine("  ✅ Travel compliance: Validate passport → Check visa → Verify vaccinations → Approve");
+Console.WriteLine("  ✅ Booking pipeline: Search flights (parallel) → Compare prices → Book → Send confirmation");
 Console.WriteLine();
 Console.WriteLine("Use agents/agents-as-tools when the model should decide:");
-Console.WriteLine("  ✅ Q&A assistant that may or may not need to look up weather");
+Console.WriteLine("  ✅ TripBot that may or may not need weather, visa info, or flight search");
 Console.WriteLine("  ✅ Travel planner that delegates to specialists based on the request");
 
 // --- Type declarations must come after all top-level statements in C# ---

@@ -16,7 +16,7 @@ static string GetWeather([Description("The location")] string location)
 AIAgent baseAgent = new AIProjectClient(new Uri(endpoint), new DefaultAzureCredential())
     .AsAIAgent(
         model: deploymentName,
-        instructions: "You are a helpful assistant.",
+        instructions: "You are TripBot, a travel planning assistant.",
         tools: [AIFunctionFactory.Create(GetWeather)]);
 
 // Chain middleware using the builder pattern.
@@ -29,7 +29,7 @@ AIAgent agentWithMiddleware = baseAgent
     .Build();
 
 Console.WriteLine("--- Agent with middleware ---");
-Console.WriteLine(await agentWithMiddleware.RunAsync("What is the weather in London?"));
+Console.WriteLine(await agentWithMiddleware.RunAsync("I'm planning a trip to Paris. What's the weather like there?"));
 
 // --- Agent Run Middleware ---
 // Wraps the full agent run. Can inspect/modify input and output.

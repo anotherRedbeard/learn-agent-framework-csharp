@@ -10,16 +10,16 @@ var deploymentName = Environment.GetEnvironmentVariable("AZURE_OPENAI_DEPLOYMENT
 AIAgent agent = new AIProjectClient(new Uri(endpoint), new DefaultAzureCredential())
     .AsAIAgent(
         model: deploymentName,
-        instructions: "You are a friendly assistant. Keep your answers brief.",
-        name: "HelloAgent");
+        instructions: "You are TripBot, a friendly travel planning assistant. Help users explore destinations, plan itineraries, and answer travel questions. Keep answers brief.",
+        name: "TripBot");
 
 // Non-streaming: get the complete response at once
 Console.WriteLine("--- Non-streaming ---");
-Console.WriteLine(await agent.RunAsync("What is the largest city in France?"));
+Console.WriteLine(await agent.RunAsync("What are the top 3 things to do in Paris?"));
 
 // Streaming: receive tokens as they are generated
 Console.WriteLine("\n--- Streaming ---");
-await foreach (var update in agent.RunStreamingAsync("Tell me a one-sentence fun fact about space."))
+await foreach (var update in agent.RunStreamingAsync("Give me a one-sentence travel tip for first-time visitors to Tokyo."))
 {
     Console.Write(update);
 }

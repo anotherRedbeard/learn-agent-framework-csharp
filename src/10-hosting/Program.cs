@@ -30,14 +30,14 @@ builder.Services.AddKeyedSingleton("chat-model", chatClient);
 // not created inline, so they can participate in the DI lifecycle.
 var weatherAgent = builder.AddAIAgent(
     "weather",
-    instructions: "You are a weather expert. Answer questions about weather accurately and concisely.",
-    description: "An agent that answers weather-related questions.",
+    instructions: "You are a destination weather expert. When given a travel destination, provide current conditions and advice on whether the weather is suitable for travel.",
+    description: "Provides weather conditions for travel destinations.",
     chatClientServiceKey: "chat-model");
 
 var travelAgent = builder.AddAIAgent(
     "travel",
-    instructions: "You are a travel planning assistant. Help users plan trips, suggest destinations, and provide travel tips.",
-    description: "An agent that helps with travel planning.",
+    instructions: "You are TripBot, a travel itinerary planner. Given a destination and trip context, create helpful day-by-day itineraries, suggest activities, and provide practical travel tips.",
+    description: "Creates travel itineraries and trip recommendations.",
     chatClientServiceKey: "chat-model");
 
 // Register a sequential workflow: weather → travel

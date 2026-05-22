@@ -35,15 +35,15 @@ AIAgent weatherAgent = client.AsAIAgent(
 // It just knows it can delegate weather-related questions to it
 AIAgent orchestratorAgent = client.AsAIAgent(
     model: deploymentName,
-    instructions: "You are a helpful travel planning assistant. " +
+    instructions: "You are TripBot, a travel planning assistant. " +
                   "For weather-related questions, delegate to the weather agent. " +
-                  "Synthesize all results into a cohesive response.",
+                  "Synthesize all results into a cohesive travel recommendation.",
     tools: [weatherAgent.AsAIFunction()]);
 
-Console.WriteLine("--- Agent composition: outer agent delegates to inner weather agent ---");
+Console.WriteLine("--- TripBot delegates weather questions to the WeatherAgent ---");
 Console.WriteLine(await orchestratorAgent.RunAsync(
-    "I'm planning a trip to Amsterdam next week. What's the weather like there?"));
+    "I'm planning a trip to Amsterdam next week — is the weather good for sightseeing?"));
 
 Console.WriteLine();
 Console.WriteLine(await orchestratorAgent.RunAsync(
-    "Should I pack an umbrella for Tokyo this week?"));
+    "Should I pack a raincoat for my Tokyo trip this week?"));
