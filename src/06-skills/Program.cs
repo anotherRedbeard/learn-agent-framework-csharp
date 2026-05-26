@@ -21,7 +21,7 @@ AIAgent agent = new AIProjectClient(new Uri(endpoint), new DefaultAzureCredentia
     .AsAIAgent(new ChatClientAgentOptions
     {
         Name = "TripBot",
-        ChatOptions = new() { Instructions = "You are TripBot, a travel planning assistant that specializes in helping travelers understand entry requirements and travel policies." },
+        ChatOptions = new() { ModelId = deploymentName, Instructions = "You are TripBot, a travel planning assistant that specializes in helping travelers understand entry requirements and travel policies." },
         AIContextProviders = [skillsProvider],
     });
 
