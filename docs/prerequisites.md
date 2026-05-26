@@ -1,13 +1,13 @@
 # Prerequisites
 
-## 1. .NET 9 SDK
+## 1. .NET 10 SDK
 
-Download and install the [.NET 9 SDK](https://dotnet.microsoft.com/download/dotnet/9.0).
+Download and install the [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0).
 
 Verify with:
 ```bash
 dotnet --version
-# Should output 9.x.x
+# Should output 10.x.x
 ```
 
 ## 2. Provision Azure Resources

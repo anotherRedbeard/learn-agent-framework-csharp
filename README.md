@@ -24,7 +24,7 @@ The framework abstracts away which LLM provider you use — swap from Azure Open
 3. Once your credentials are configured → **[Start here: src/README.md](src/README.md)**
 
 **Quick checklist:**
-- [.NET 9 SDK](https://dotnet.microsoft.com/download)
+- [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
 - Azure CLI logged in: `az login`
 - Azure resources deployed (see `infra/` or [docs/prerequisites.md](docs/prerequisites.md))
 - Credentials set via `dotnet user-secrets`
