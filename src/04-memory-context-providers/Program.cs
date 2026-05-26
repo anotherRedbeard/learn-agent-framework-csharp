@@ -41,7 +41,12 @@ AIAgent agentWithCustomHistory = new AIProjectClient(new Uri(endpoint), new Defa
     .AsAIAgent(new ChatClientAgentOptions
     {
         ChatOptions = new() { ModelId = deploymentName, Instructions = "You are TripBot, a travel planning assistant." },
-        ChatHistoryProvider = new LoggingChatHistoryProvider()
+        ChatHistoryProvider = new LoggingChatHistoryProvider(),
+        // Foundry's Responses API tracks conversation state server-side via previous_response_id.
+        // Setting these flags lets us use a custom ChatHistoryProvider anyway — the framework will
+        // silently clear the server-side conversation id and use our provider's history instead.
+        ThrowOnChatHistoryProviderConflict = false,
+        WarnOnChatHistoryProviderConflict = false
     });
 
 AgentSession session2 = await agentWithCustomHistory.CreateSessionAsync();
@@ -52,6 +57,31 @@ Console.WriteLine(await agentWithCustomHistory.RunAsync(prompt4, session2));
 var prompt5 = "What dietary preference did I mention?";
 Console.WriteLine($"> {prompt5}");
 Console.WriteLine(await agentWithCustomHistory.RunAsync(prompt5, session2));
+
+// --- Example 3: AIContextProvider (RAG / per-turn context injection) ---
+// AIContextProviders are different from ChatHistoryProvider:
+//
+//   ChatHistoryProvider = WHERE the transcript is stored (replaces default storage)
+//   AIContextProvider   = WHAT extra info to add before each LLM call (RAG, preferences, dynamic tools)
+//
+// You can use both at once. This example shows a provider that, on every turn,
+// pulls the user's profile from a "database" (simulated here as a static record)
+// and injects it as a system message — exactly how you'd wire up a RAG lookup,
+// a memory store like Mem0, or a personalization service.
+Console.WriteLine("\n=== Example 3: AIContextProvider (per-turn injection) ===");
+
+AIAgent agentWithContext = new AIProjectClient(new Uri(endpoint), new DefaultAzureCredential())
+    .AsAIAgent(new ChatClientAgentOptions
+    {
+        ChatOptions = new() { ModelId = deploymentName, Instructions = "You are TripBot, a travel planning assistant. Keep answers brief." },
+        AIContextProviders = [new UserPreferencesContextProvider()]
+    });
+
+AgentSession session3 = await agentWithContext.CreateSessionAsync();
+var prompt6 = "Suggest a weekend trip for me.";
+Console.WriteLine($"> {prompt6}");
+Console.WriteLine(await agentWithContext.RunAsync(prompt6, session3));
+// Notice: the agent uses the injected preferences even though the user never typed them this session.
 
 // --- Custom ChatHistoryProvider implementation ---
 // Subclass ChatHistoryProvider and override two methods:
@@ -84,3 +114,32 @@ class LoggingChatHistoryProvider : ChatHistoryProvider
         return ValueTask.CompletedTask;
     }
 }
+
+// --- Custom AIContextProvider implementation ---
+// Subclass MessageAIContextProvider and override one method:
+//   ProvideMessagesAsync — called BEFORE each run; return additional messages to inject
+//
+// This is where you put RAG lookups, user profile fetches, memory recall, dynamic tools, etc.
+// In a real app you'd hit a vector DB / profile store / cache here instead of using a static record.
+#pragma warning disable MAAI001 // InvokingContext is evaluation-only API
+class UserPreferencesContextProvider : MessageAIContextProvider
+{
+    protected override ValueTask<IEnumerable<ChatMessage>> ProvideMessagesAsync(
+        InvokingContext context,
+        CancellationToken cancellationToken = default)
+    {
+        // Pretend we just queried a profile DB / RAG index for the current user.
+        var profile = """
+            User profile (loaded fresh each turn from an external store):
+            - Prefers window seats
+            - Vegetarian
+            - Home airport: Dallas Fort Worth (DFW)
+            - Budget-conscious traveler
+            """;
+
+        Console.WriteLine("  [Context] Injecting user profile for this turn");
+        return ValueTask.FromResult<IEnumerable<ChatMessage>>(
+            [new ChatMessage(ChatRole.System, profile)]);
+    }
+}
+#pragma warning restore MAAI001

@@ -7,15 +7,27 @@
 - How `AgentSession` keeps related turns connected
 - How the default `InMemoryChatHistoryProvider` stores conversation history
 - How to implement a custom `ChatHistoryProvider` for persistent memory
-- Why context providers are proactive, while tools are reactive
+- How to use an `AIContextProvider` to inject RAG / profile / dynamic context per turn
+- **The key distinction** between session, history provider, and context provider
 
-## When to use this pattern
+## The three concepts at a glance
 
-Memory and context providers are the right pattern when:
-- The agent needs to remember facts from earlier turns in the same conversation
-- You need user-specific personalization like preferences, profile details, or account context
-- You want to inject information automatically before every model call
-- You're preparing for production storage in SQL, Redis, Azure Cosmos DB, or another backend
+| Concept | Role | Analogy |
+|---|---|---|
+| `AgentSession` | **Identity** of the conversation thread | A chat thread ID |
+| `ChatHistoryProvider` | **Storage** for the thread's transcript (pluggable) | A filing cabinet for chat logs |
+| `AIContextProvider` | **Per-turn augmentation** — extras layered on top of the transcript | A research assistant slipping you notes before each meeting |
+
+They are independent. You can use any combination. A long-running personalized agent typically uses **all three**: session to identify the conversation, a custom history provider to persist the transcript, and one or more context providers to inject user profile, RAG hits, and policies on every turn.
+
+## When to use each
+
+| Need | Use |
+|---|---|
+| Keep a conversation going across turns | Just `AgentSession` (default storage is fine) |
+| Survive app restarts; share conversations across instances | Custom `ChatHistoryProvider` |
+| Inject user profile / RAG results / runtime tools each call | `AIContextProvider` |
+| Long-running agent that learns facts over time | All three |
 
 ---
 
@@ -26,7 +38,13 @@ cd src/04-memory-context-providers
 dotnet run
 ```
 
-You should see TripBot remember travel preferences in one session, then use a custom history provider that logs when history is provided and stored. Once it's working, move on to Step 2.
+You should see three examples in order:
+
+1. **Default in-memory history** — TripBot remembers facts across turns using the built-in provider.
+2. **Custom `ChatHistoryProvider`** — same behavior, but every store/provide call is logged so you can see the storage hooks fire.
+3. **`AIContextProvider`** — a simulated user-profile lookup runs before every turn and injects preferences as a system message. TripBot then suggests a trip using preferences you never typed.
+
+Once it's working, move on to Step 2.
 
 ---
 
@@ -70,33 +88,66 @@ Console.WriteLine(await agent.RunAsync(prompt3, session));
 - The third call works because the previous user messages are injected as conversation context
 - Without the session, each `RunAsync` would start from scratch
 
-### Provide custom history
+### Provide custom history (storage)
 
 ```csharp
 AIAgent agentWithCustomHistory = new AIProjectClient(new Uri(endpoint), new DefaultAzureCredential())
     .AsAIAgent(new ChatClientAgentOptions
     {
-        ChatOptions = new() { Instructions = "You are TripBot, a travel planning assistant." },
-        ChatHistoryProvider = new LoggingChatHistoryProvider()
+        ChatOptions = new() { ModelId = deploymentName, Instructions = "You are TripBot..." },
+        ChatHistoryProvider = new LoggingChatHistoryProvider(),
+        // Foundry's Responses API tracks conversation state server-side. These flags let
+        // your custom provider take over instead — no exception, no warning.
+        ThrowOnChatHistoryProviderConflict = false,
+        WarnOnChatHistoryProviderConflict = false
     });
 ```
 
 - `ChatClientAgentOptions` lets you replace the default history provider
-- `ChatHistoryProvider` is the extension point for storing memory in your own backend
+- `ChatHistoryProvider` is the extension point for storing the transcript in your own backend
 - In production, key stored messages by session or user instead of using one shared list
 
-### Inject context before and after each run
+### History provider hooks (store + provide)
 
 ```csharp
 protected override ValueTask<IEnumerable<ChatMessage>> ProvideChatHistoryAsync(...)
 protected override ValueTask StoreChatHistoryAsync(...)
 ```
 
-- `ProvideChatHistoryAsync` runs **before** the model call and returns stored messages to inject
-- `StoreChatHistoryAsync` runs **after** the model call and persists the new request and response messages
-- This is proactive context: the developer decides what context is always available
+- `ProvideChatHistoryAsync` runs **before** the model call and returns stored messages to inject as transcript
+- `StoreChatHistoryAsync` runs **after** the model call and persists the new request and response
+- This is the **storage** layer — it owns *the transcript*
 
-> **Rule of thumb:** If the agent should have this information every time, use a context provider. If it should fetch it only when relevant, use a tool.
+### Per-turn context injection (augmentation)
+
+```csharp
+AIAgent agentWithContext = new AIProjectClient(...).AsAIAgent(new ChatClientAgentOptions
+{
+    ChatOptions = new() { ModelId = deploymentName, Instructions = "..." },
+    AIContextProviders = [new UserPreferencesContextProvider()]
+});
+```
+
+```csharp
+class UserPreferencesContextProvider : MessageAIContextProvider
+{
+    protected override ValueTask<IEnumerable<ChatMessage>> ProvideMessagesAsync(
+        InvokingContext context, CancellationToken cancellationToken = default)
+    {
+        // In production: hit a vector DB, profile store, Mem0, etc.
+        var profile = "User profile: prefers window seats, vegetarian, home airport DFW, budget-conscious.";
+        return ValueTask.FromResult<IEnumerable<ChatMessage>>(
+            [new ChatMessage(ChatRole.System, profile)]);
+    }
+}
+```
+
+- `AIContextProvider` runs **before every invocation** and adds extra messages on top of the transcript
+- It does **not** replace storage — `ChatHistoryProvider` still owns the transcript
+- This is where RAG, user profiles, memory recall (Mem0), dynamic system prompts, and runtime tool injection live
+- The framework stamps these messages so the LLM sees them but they don't pollute the user's transcript
+
+> **Rule of thumb:** If the agent needs *the message history*, use a `ChatHistoryProvider`. If the agent needs *extra info derived elsewhere* (RAG, profile, policy, current time), use an `AIContextProvider`. If the agent should decide for itself when to fetch, use a tool (Module 02).
 
 ---
 
@@ -108,16 +159,23 @@ Work through these challenges in order. Each one builds on the previous.
 
 Edit the first example so TripBot learns different travel facts: a preferred airline, a passport detail, or a hotel preference. Run it and verify the final question reflects your new facts.
 
-### 🟡 Intermediate — Implement a custom `IContextProvider`
+### 🟡 Intermediate — Make the `AIContextProvider` actually dynamic
 
-Add a context provider that injects dynamic context before every run — for example, the current date, the user's loyalty tier, or a small travel policy snippet. Register it with `AIContextProviders` in `ChatClientAgentOptions`, then verify TripBot uses the injected context without being asked directly.
+The Example 3 provider returns a static profile. Replace it with one that:
+1. Reads a JSON file (e.g. `userprofile.json`) on each call
+2. Falls back to defaults if the file is missing
+3. Logs which fields were loaded
 
-### 🔴 Stretch — Persist memory to JSON or SQLite
+This is the same shape you'd use for a real RAG lookup — swap the file for a vector DB or profile API and you're done.
 
-Replace the in-memory list in `LoggingChatHistoryProvider` with durable storage:
-1. Load messages for the current session in `ProvideChatHistoryAsync`
-2. Append the new request and response messages in `StoreChatHistoryAsync`
-3. Stop and restart the app, then confirm TripBot still remembers the prior facts
+### 🔴 Stretch — Combine all three (session + history + context)
+
+Build an agent that uses **all three** abstractions together:
+1. A session to identify the conversation
+2. A `ChatHistoryProvider` persisting messages to JSON or SQLite (keyed by session id)
+3. An `AIContextProvider` that summarizes the last 3 stored messages into a short "what we talked about" memo injected as a system message each turn
+
+Stop and restart the app — the agent should still remember and the memo should still get injected.
 
 > **Hint:** Keep memory scoped by session. A single global history list will leak one conversation's context into another.
 
@@ -137,18 +195,24 @@ dotnet run                           # will fail — that's expected, fill in th
 
 ## Key concepts
 
-### What `AgentSession` gives you
-A handle that groups related turns. Pass the same session to each `RunAsync` call when the agent should remember previous messages.
+### `AgentSession` — conversation identity
+A handle that groups related turns. Pass the same session to each `RunAsync` call when the agent should remember previous messages. Think of it as a thread ID.
 
-### What `ChatHistoryProvider` adds
+### `ChatHistoryProvider` — transcript storage
 - **Provide history** — inject prior messages before the model runs
 - **Store history** — persist the new request and response after the model runs
 - **Storage control** — move from process memory to JSON, SQLite, Redis, Cosmos DB, or another backend
+- Owns *the transcript itself*
+
+### `AIContextProvider` — per-turn augmentation
+- Runs before every invocation
+- Returns *additional* messages or system instructions
+- Where RAG lookups, user profiles, Mem0 recall, and dynamic tool injection live
+- Does **not** replace the transcript — it layers on top
 
 ### Tools vs. context providers
-- **Tools** are reactive — the model decides when to call them
-- **Context providers** are proactive — your code runs before every invocation
-- Use context providers for always-present context: history, profiles, policies, and relevant knowledge
+- **Tools** are reactive — the LLM decides when to call them (Module 02)
+- **Context providers** are proactive — your code runs before every invocation regardless
 
 ## Anti-patterns to avoid
 
