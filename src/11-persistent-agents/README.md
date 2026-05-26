@@ -10,7 +10,7 @@
 - How to read messages back from a thread
 - How persistent agents appear in the Foundry portal
 
-## When to use persistent agents
+## When to use this pattern
 
 Use the Azure AI Agents Service when:
 - The agent must be **visible and editable** in the Foundry portal
@@ -38,7 +38,7 @@ Stick with the **client-side `AIAgent`** (modules 01–10) when:
 
 ---
 
-## Step 1 — Run it
+## Step 1 — Run it first
 
 ```bash
 cd src/11-persistent-agents
@@ -141,6 +141,18 @@ Wrap the message + run + read loop in a `while(true)` that:
 4. Prints only the latest assistant message
 
 The thread retains the full history server-side — no `AgentSession` needed.
+
+---
+
+## Step 4 — Build it from scratch (optional)
+
+Want to prove you understand it? Delete `Program.cs` contents and rebuild from `Program.scaffold.cs`:
+
+```bash
+# In src/11-persistent-agents/
+cp Program.scaffold.cs Program.cs   # overwrites the solution with the scaffold
+dotnet run                           # will fail — that's expected, fill in the TODOs
+```
 
 ---
 

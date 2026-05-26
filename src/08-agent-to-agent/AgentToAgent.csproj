@@ -5,6 +5,12 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
+
+  <!-- Exclude scaffold file so it doesn't conflict with Program.cs -->
+  <ItemGroup>
+    <Compile Remove="*.scaffold.cs" />
+  </ItemGroup>
+
   <!-- No Agent Framework packages needed here — this is a plain HTTP client.
        A2A is just JSON over HTTP. Any language or framework can call it. -->
 </Project>

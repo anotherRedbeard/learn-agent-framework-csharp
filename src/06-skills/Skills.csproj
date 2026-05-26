@@ -8,6 +8,11 @@
     <NoWarn>$(NoWarn);MAAI001</NoWarn>
   </PropertyGroup>
 
+  <!-- Exclude scaffold file so it doesn't conflict with Program.cs -->
+  <ItemGroup>
+    <Compile Remove="*.scaffold.cs" />
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="Azure.AI.Projects" Version="*-*" />
     <PackageReference Include="Azure.Identity" Version="*" />
