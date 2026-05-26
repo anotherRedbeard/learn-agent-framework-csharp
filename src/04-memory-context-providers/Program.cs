@@ -40,7 +40,7 @@ Console.WriteLine("\n=== Example 2: Custom ChatHistoryProvider ===");
 AIAgent agentWithCustomHistory = new AIProjectClient(new Uri(endpoint), new DefaultAzureCredential())
     .AsAIAgent(new ChatClientAgentOptions
     {
-        ChatOptions = new() { Instructions = "You are TripBot, a travel planning assistant." },
+        ChatOptions = new() { ModelId = deploymentName, Instructions = "You are TripBot, a travel planning assistant." },
         ChatHistoryProvider = new LoggingChatHistoryProvider()
     });
 
@@ -78,9 +78,9 @@ class LoggingChatHistoryProvider : ChatHistoryProvider
     {
         // context.RequestMessages  — what was sent to the model this turn
         // context.ResponseMessages — what the model replied with this turn
-        _history.AddRange(context.RequestMessages);
-        _history.AddRange(context.ResponseMessages);
-        Console.WriteLine($"  [History] Stored {context.RequestMessages.Count()} request + {context.ResponseMessages.Count()} response messages");
+        if (context.RequestMessages is { } request) _history.AddRange(request);
+        if (context.ResponseMessages is { } response) _history.AddRange(response);
+        Console.WriteLine($"  [History] Stored {context.RequestMessages?.Count() ?? 0} request + {context.ResponseMessages?.Count() ?? 0} response messages");
         return ValueTask.CompletedTask;
     }
 }
