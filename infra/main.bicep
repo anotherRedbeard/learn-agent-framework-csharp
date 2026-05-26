@@ -47,12 +47,16 @@ resource foundryAccount 'Microsoft.CognitiveServices/accounts@2025-06-01' = {
   name: '${name}-foundry'
   location: location
   kind: 'AIServices'
+  identity: {
+    type: 'SystemAssigned'
+  }
   sku: {
     name: 'S0'
   }
   properties: {
     allowProjectManagement: true
     customSubDomainName: '${name}-foundry'
+    disableLocalAuth: false
     publicNetworkAccess: 'Enabled'
   }
 }
@@ -64,6 +68,9 @@ resource foundryProject 'Microsoft.CognitiveServices/accounts/projects@2025-06-0
   parent: foundryAccount
   name: projectName
   location: location
+  identity: {
+    type: 'SystemAssigned'
+  }
   properties: {}
 }
 
