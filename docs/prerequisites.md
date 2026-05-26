@@ -27,7 +27,7 @@ az login
 az account set --subscription "<your-subscription-id>"
 
 # 2. Create a resource group
-az group create --name rg-tripbot --location eastus
+az group create --name rg-tripbot --location eastus2
 
 # 3. Get your user object ID (for the role assignment)
 az ad signed-in-user show --query id -o tsv
