@@ -21,6 +21,8 @@ The `infra/` folder contains a Bicep template that provisions everything you nee
 - **gpt-4o-mini** model deployment
 - **Role assignment** so your user account has passwordless access
 
+> **Don't edit `infra/main.bicepparam`** — your `principalId` is passed inline on the command line below so it never gets committed to the repo.
+
 ```bash
 # 1. Log in and set your subscription
 az login
@@ -29,18 +31,14 @@ az account set --subscription "<your-subscription-id>"
 # 2. Create a resource group
 az group create --name rg-tripbot --location eastus2
 
-# 3. Get your user object ID (for the role assignment)
-az ad signed-in-user show --query id -o tsv
-
-# 4. Open infra/main.bicepparam and paste your ID into principalId = ''
-
-# 5. Deploy
+# 3. Deploy — principalId is passed inline so it never touches the committed file
 az deployment group create \
   --resource-group rg-tripbot \
   --template-file infra/main.bicep \
-  --parameters infra/main.bicepparam
+  --parameters infra/main.bicepparam \
+  --parameters principalId=$(az ad signed-in-user show --query id -o tsv)
 
-# 6. Copy the outputs — you'll need them in the next step
+# 4. Copy the outputs — you'll need them in the next step
 ```
 
 The deployment outputs `AZURE_OPENAI_ENDPOINT` and `AZURE_OPENAI_DEPLOYMENT_NAME` — copy these values for Step 4 below.
