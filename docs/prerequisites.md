@@ -17,9 +17,10 @@ You have two options — pick one:
 ### Option A: Bicep (recommended)
 
 The `infra/` folder contains a Bicep template that provisions everything you need:
-- **Azure AI Services** account (AI Foundry-compatible endpoint)
+- **Azure Foundry** account with project management enabled
+- **Foundry project** (visible in [ai.azure.com](https://ai.azure.com))
 - **gpt-4o-mini** model deployment
-- **Role assignment** so your user account has passwordless access
+- **Foundry User role** assignment for passwordless access
 
 > **Don't edit `infra/main.bicepparam`** — your `principalId` is passed inline on the command line below so it never gets committed to the repo.
 
@@ -46,18 +47,20 @@ The full JSON output is verbose — use this to extract just the two values you 
 ENDPOINT=$(az deployment group show \
   --resource-group rg-tripbot \
   --name main \
-  --query "properties.outputs.azurE_OPENAI_ENDPOINT.value" -o tsv)
+  --query "properties.outputs.AZURE_OPENAI_ENDPOINT.value" -o tsv)
 
 DEPLOYMENT=$(az deployment group show \
   --resource-group rg-tripbot \
   --name main \
-  --query "properties.outputs.azurE_OPENAI_DEPLOYMENT_NAME.value" -o tsv)
+  --query "properties.outputs.AZURE_OPENAI_DEPLOYMENT_NAME.value" -o tsv)
 
 echo "AZURE_OPENAI_ENDPOINT:        $ENDPOINT"
 echo "AZURE_OPENAI_DEPLOYMENT_NAME: $DEPLOYMENT"
 ```
 
-Copy those printed values — you'll use them in Step 4 to configure `dotnet user-secrets`.
+After deployment completes, your project will be visible at [https://ai.azure.com](https://ai.azure.com) under the name **tripbot-project**.
+
+Copy the printed values — you'll use them in Step 4 to configure `dotnet user-secrets`.
 
 ### Option B: Manual (Azure AI Foundry portal)
 

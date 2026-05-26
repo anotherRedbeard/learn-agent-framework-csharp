@@ -7,6 +7,9 @@ param location string = resourceGroup().location
 @maxLength(15)
 param name string = 'tripbot'
 
+@description('Name for the Foundry project.')
+param projectName string = 'tripbot-project'
+
 @description('Name of the GPT model to deploy. Used as AZURE_OPENAI_DEPLOYMENT_NAME.')
 @allowed(['gpt-4o-mini', 'gpt-4o', 'gpt-4'])
 param modelDeploymentName string = 'gpt-4o-mini'
@@ -16,36 +19,48 @@ param modelCapacity int = 10
 
 @description('''
 Object ID of the user or managed identity that will run the samples.
-This grants the "Cognitive Services OpenAI User" role, enabling DefaultAzureCredential access.
+This grants the "Foundry User" role on the project, enabling DefaultAzureCredential access.
 Get your own ID with:  az ad signed-in-user show --query id -o tsv
 Leave empty to skip role assignment (you can add it manually later).
 ''')
 param principalId string = ''
 
-// ── Azure AI Services ──────────────────────────────────────────────────────────
-// AIServices provides the AI Foundry-compatible endpoint used by AIProjectClient.
-// The endpoint output below is what goes into AZURE_OPENAI_ENDPOINT.
-resource aiServices 'Microsoft.CognitiveServices/accounts@2024-10-01' = {
-  name: '${name}-ai'
+// ── Azure Foundry Resource (AIServices with project management) ────────────────
+// This is the parent resource that hosts Foundry projects.
+// Following https://learn.microsoft.com/en-us/azure/foundry/tutorials/quickstart-create-foundry-resources
+resource foundryAccount 'Microsoft.CognitiveServices/accounts@2024-10-01' = {
+  name: '${name}-foundry'
   location: location
   kind: 'AIServices'
   sku: {
     name: 'S0'
   }
   properties: {
-    customSubDomainName: '${name}-ai'
+    customSubDomainName: '${name}-foundry'
     publicNetworkAccess: 'Enabled'
+    // Enable project creation within this resource
+    allowProjectManagement: true
   }
 }
 
+// ── Foundry Project ────────────────────────────────────────────────────────────
+// The project organizes your work and is visible in ai.azure.com.
+// AIProjectClient connects to the project endpoint.
+resource foundryProject 'Microsoft.CognitiveServices/accounts/projects@2024-10-01' = {
+  parent: foundryAccount
+  name: projectName
+  location: location
+  properties: {}
+}
+
 // ── Model Deployment ───────────────────────────────────────────────────────────
-// Deploys gpt-4o-mini (or your chosen model) using the GlobalStandard SKU.
-// GlobalStandard routes across Azure regions for better availability.
+// Deploys gpt-4o-mini (or your chosen model) using the Standard SKU.
+// The model is deployed to the Foundry account and is accessible by all projects.
 resource modelDeployment 'Microsoft.CognitiveServices/accounts/deployments@2024-10-01' = {
-  parent: aiServices
+  parent: foundryAccount
   name: modelDeploymentName
   sku: {
-    name: 'GlobalStandard'
+    name: 'Standard'
     capacity: modelCapacity
   }
   properties: {
@@ -57,17 +72,18 @@ resource modelDeployment 'Microsoft.CognitiveServices/accounts/deployments@2024-
 }
 
 // ── Role Assignment ────────────────────────────────────────────────────────────
-// "Cognitive Services OpenAI User" (built-in role) — required for passwordless
-// access via DefaultAzureCredential. Only created when principalId is provided.
-var cognitiveServicesOpenAIUserRoleId = '5e0bd9bd-7b93-4f28-af87-19fc36ad61bd'
+// "Foundry User" (built-in role) — grants minimum permissions to use the project.
+// Scoped to the project so the user can access it in ai.azure.com and via AIProjectClient.
+// Role definition ID: 53ca6127-db72-4b80-b1b0-d745d6d5456d
+var foundryUserRoleId = '53ca6127-db72-4b80-b1b0-d745d6d5456d'
 
 resource roleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(principalId)) {
-  name: guid(aiServices.id, principalId, cognitiveServicesOpenAIUserRoleId)
-  scope: aiServices
+  name: guid(foundryProject.id, principalId, foundryUserRoleId)
+  scope: foundryProject
   properties: {
     roleDefinitionId: subscriptionResourceId(
       'Microsoft.Authorization/roleDefinitions',
-      cognitiveServicesOpenAIUserRoleId
+      foundryUserRoleId
     )
     principalId: principalId
     principalType: 'User'
@@ -79,7 +95,10 @@ resource roleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = i
 // See docs/prerequisites.md for how to set them.
 
 @description('Set this as AZURE_OPENAI_ENDPOINT in dotnet user-secrets.')
-output AZURE_OPENAI_ENDPOINT string = aiServices.properties.endpoint
+output AZURE_OPENAI_ENDPOINT string = foundryProject.properties.projectEndpoint
 
 @description('Set this as AZURE_OPENAI_DEPLOYMENT_NAME in dotnet user-secrets.')
 output AZURE_OPENAI_DEPLOYMENT_NAME string = modelDeployment.name
+
+@description('The project will be visible at https://ai.azure.com under this name.')
+output PROJECT_NAME string = foundryProject.name

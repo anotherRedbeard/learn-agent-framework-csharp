@@ -1,8 +1,11 @@
 using './main.bicep'
 
 // Short prefix for resource names — must be unique within your Azure subscription.
-// Resources created: <name>-ai (Azure AI Services account)
+// Resources created: <name>-foundry (Azure Foundry account)
 param name = 'tripbot'
+
+// Name for the Foundry project visible in ai.azure.com
+param projectName = 'tripbot-project'
 
 // Model to deploy. gpt-4o-mini is recommended: low cost, fast, sufficient for all modules.
 param modelDeploymentName = 'gpt-4o-mini'
