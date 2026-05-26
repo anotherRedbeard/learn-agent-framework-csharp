@@ -2,6 +2,27 @@
 
 You've completed the prerequisites. You're ready to build TripBot.
 
+## Before you write any code — fork & branch
+
+You'll be modifying code throughout this course. Fork the repo first so your changes are yours, then create a working branch.
+
+**Fork on GitHub:**
+1. Click **Fork** in the top-right corner of the repo page on GitHub
+2. Clone your fork locally:
+```bash
+git clone https://github.com/<your-username>/learn-agent-framework-csharp.git
+cd learn-agent-framework-csharp
+```
+
+**Create a working branch:**
+```bash
+git checkout -b my-learning
+```
+
+Now all your changes stay on `my-learning` and the original `main` is always there as a clean reference if you need to look something up or reset.
+
+---
+
 ## What you're building
 
 TripBot is a travel planning assistant that evolves across 10 modules. Each module adds exactly one capability — no more, no less. By the end you'll have a fully hosted, multi-agent travel assistant exposed over the A2A protocol.
