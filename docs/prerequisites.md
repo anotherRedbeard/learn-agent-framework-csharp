@@ -14,51 +14,42 @@ dotnet --version
 
 You have two options — pick one:
 
-### Option A: Bicep (recommended)
+### Option A: Automated script (recommended)
 
-The `infra/` folder contains a Bicep template that provisions everything you need:
+The `infra/` folder contains deployment scripts that provision everything you need:
 - **Azure Foundry** account with project management enabled
 - **Foundry project** (visible in [ai.azure.com](https://ai.azure.com))
 - **gpt-4o-mini** model deployment
 - **Foundry User role** assignment for passwordless access
 
-> **Don't edit `infra/main.bicepparam`** — your `principalId` is passed inline on the command line below so it never gets committed to the repo.
+**macOS / Linux / Git Bash / WSL:**
 
 ```bash
 # 1. Log in and set your subscription
 az login
 az account set --subscription "<your-subscription-id>"
 
-# 2. Create a resource group
-az group create --name rg-tripbot --location eastus2
-
-# 3. Deploy — principalId is passed inline so it never touches the committed file
-az deployment group create \
-  --resource-group rg-tripbot \
-  --template-file infra/main.bicep \
-  --parameters infra/main.bicepparam \
-  --parameters principalId=$(az ad signed-in-user show --query id -o tsv)
+# 2. Run the deployment script
+cd infra
+./deploy.sh
 ```
 
-The full JSON output is verbose — use this to extract just the two values you need:
+**Windows PowerShell:**
 
-```bash
-# Extract the endpoint and deployment name cleanly
-ENDPOINT=$(az deployment group show \
-  --resource-group rg-tripbot \
-  --name main \
-  --query "properties.outputs.AZURE_OPENAI_ENDPOINT.value" -o tsv)
+```powershell
+# 1. Log in and set your subscription
+az login
+az account set --subscription "<your-subscription-id>"
 
-DEPLOYMENT=$(az deployment group show \
-  --resource-group rg-tripbot \
-  --name main \
-  --query "properties.outputs.AZURE_OPENAI_DEPLOYMENT_NAME.value" -o tsv)
-
-echo "AZURE_OPENAI_ENDPOINT:        $ENDPOINT"
-echo "AZURE_OPENAI_DEPLOYMENT_NAME: $DEPLOYMENT"
+# 2. Run the deployment script
+cd infra
+.\deploy.ps1
 ```
 
-After deployment completes, your project will be visible at [https://ai.azure.com](https://ai.azure.com) under the name **tripbot-project**.
+The script will:
+- Create all resources with idempotency (safe to re-run)
+- Print your `AZURE_OPENAI_ENDPOINT` and `AZURE_OPENAI_DEPLOYMENT_NAME` at the end
+- Show your project name for [ai.azure.com](https://ai.azure.com)
 
 Copy the printed values — you'll use them in Step 4 to configure `dotnet user-secrets`.
 
