@@ -20,13 +20,13 @@ The framework abstracts away which LLM provider you use — swap from Azure Open
 ## Prerequisites & Getting Started
 
 1. Follow [docs/prerequisites.md](docs/prerequisites.md) for full setup instructions
-2. Deploy Azure resources: `cd infra && ./deploy.sh` (or `.\deploy.ps1` on Windows)
+2. Deploy Azure resources: `az deployment group create --template-file infra/main.bicep --parameters infra/main.bicepparam --parameters principalId=$(az ad signed-in-user show --query id -o tsv)`
 3. Once your credentials are configured → **[Start here: src/README.md](src/README.md)**
 
 **Quick checklist:**
 - [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
 - Azure CLI logged in: `az login`
-- Azure resources deployed (run `infra/deploy.sh` or see [docs/prerequisites.md](docs/prerequisites.md))
+- Azure resources deployed (run Bicep or see [docs/prerequisites.md](docs/prerequisites.md))
 - Credentials set via `dotnet user-secrets`
 
 ## Modules
