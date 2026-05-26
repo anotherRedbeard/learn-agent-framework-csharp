@@ -37,11 +37,27 @@ az deployment group create \
   --template-file infra/main.bicep \
   --parameters infra/main.bicepparam \
   --parameters principalId=$(az ad signed-in-user show --query id -o tsv)
-
-# 4. Copy the outputs — you'll need them in the next step
 ```
 
-The deployment outputs `AZURE_OPENAI_ENDPOINT` and `AZURE_OPENAI_DEPLOYMENT_NAME` — copy these values for Step 4 below.
+The full JSON output is verbose — use this to extract just the two values you need:
+
+```bash
+# Extract the endpoint and deployment name cleanly
+ENDPOINT=$(az deployment group show \
+  --resource-group rg-tripbot \
+  --name main \
+  --query "properties.outputs.azurE_OPENAI_ENDPOINT.value" -o tsv)
+
+DEPLOYMENT=$(az deployment group show \
+  --resource-group rg-tripbot \
+  --name main \
+  --query "properties.outputs.azurE_OPENAI_DEPLOYMENT_NAME.value" -o tsv)
+
+echo "AZURE_OPENAI_ENDPOINT:        $ENDPOINT"
+echo "AZURE_OPENAI_DEPLOYMENT_NAME: $DEPLOYMENT"
+```
+
+Copy those printed values — you'll use them in Step 4 to configure `dotnet user-secrets`.
 
 ### Option B: Manual (Azure AI Foundry portal)
 
