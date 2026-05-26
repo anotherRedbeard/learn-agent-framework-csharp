@@ -68,7 +68,9 @@ AIAgent agent = new AIProjectClient(new Uri(endpoint), new DefaultAzureCredentia
 
 ```csharp
 AgentSession session = await agent.CreateSessionAsync();
-Console.WriteLine(await agent.RunAsync("I'm a US citizen planning a trip to Japan. Do I need a visa?", session));
+var prompt = "I'm a US citizen planning a trip to Japan. Do I need a visa?";
+Console.WriteLine($"> {prompt}");
+Console.WriteLine(await agent.RunAsync(prompt, session));
 ```
 
 - `AgentSession` keeps the conversation together across multiple calls

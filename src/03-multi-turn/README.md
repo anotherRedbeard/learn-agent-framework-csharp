@@ -62,9 +62,17 @@ AgentSession session = await agent.CreateSessionAsync();
 ### Stateful turns
 
 ```csharp
-Console.WriteLine(await agent.RunAsync("I'm planning a 10-day trip to Japan in October...", session));
-Console.WriteLine(await agent.RunAsync("What are the must-see places in Kyoto?", session));
-Console.WriteLine(await agent.RunAsync("Based on my trip, what should I pack...?", session));
+var prompt = "I'm planning a 10-day trip to Japan in October...";
+Console.WriteLine($"> {prompt}");
+Console.WriteLine(await agent.RunAsync(prompt, session));
+
+var prompt2 = "What are the must-see places in Kyoto?";
+Console.WriteLine($"> {prompt2}");
+Console.WriteLine(await agent.RunAsync(prompt2, session));
+
+var prompt3 = "Based on my trip, what should I pack...?";
+Console.WriteLine($"> {prompt3}");
+Console.WriteLine(await agent.RunAsync(prompt3, session));
 ```
 
 - Each `RunAsync` call receives the same `session`
@@ -74,7 +82,9 @@ Console.WriteLine(await agent.RunAsync("Based on my trip, what should I pack...?
 ### Stateless call
 
 ```csharp
-Console.WriteLine(await agent.RunAsync("What should I pack for my trip?"));
+var prompt4 = "What should I pack for my trip?";
+Console.WriteLine($"> {prompt4}");
+Console.WriteLine(await agent.RunAsync(prompt4));
 ```
 
 - This call does **not** pass the session, so it starts from scratch

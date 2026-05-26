@@ -41,9 +41,11 @@ AIAgent orchestratorAgent = client.AsAIAgent(
     tools: [weatherAgent.AsAIFunction()]);
 
 Console.WriteLine("--- TripBot delegates weather questions to the WeatherAgent ---");
-Console.WriteLine(await orchestratorAgent.RunAsync(
-    "I'm planning a trip to Amsterdam next week — is the weather good for sightseeing?"));
+var prompt = "I'm planning a trip to Amsterdam next week — is the weather good for sightseeing?";
+Console.WriteLine($"> {prompt}");
+Console.WriteLine(await orchestratorAgent.RunAsync(prompt));
 
 Console.WriteLine();
-Console.WriteLine(await orchestratorAgent.RunAsync(
-    "Should I pack a raincoat for my Tokyo trip this week?"));
+var prompt2 = "Should I pack a raincoat for my Tokyo trip this week?";
+Console.WriteLine($"> {prompt2}");
+Console.WriteLine(await orchestratorAgent.RunAsync(prompt2));

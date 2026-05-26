@@ -93,8 +93,9 @@ var payload = new
 ### Call another endpoint the same way
 
 ```csharp
-var response3 = await SendA2AMessage(http, "/a2a/trip-planning/v1/message:stream",
-    "Help me plan a 3-day trip to Amsterdam in October.", "trip-planning-demo-1");
+var prompt3 = "Help me plan a 3-day trip to Amsterdam in October.";
+Console.WriteLine($"> {prompt3}");
+var response3 = await SendA2AMessage(http, "/a2a/trip-planning/v1/message:stream", prompt3, "trip-planning-demo-1");
 ```
 
 - The trip-planning endpoint may be a workflow behind the scenes

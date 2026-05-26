@@ -52,7 +52,9 @@ AIAgent agent = new AIProjectClient(new Uri(endpoint), new DefaultAzureCredentia
 ### Non-streaming call
 
 ```csharp
-Console.WriteLine(await agent.RunAsync("What are the top 3 things to do in Paris?"));
+var prompt = "What are the top 3 things to do in Paris?";
+Console.WriteLine($"> {prompt}");
+Console.WriteLine(await agent.RunAsync(prompt));
 ```
 
 - `RunAsync` sends the message and **waits** for the complete response before returning
@@ -61,7 +63,9 @@ Console.WriteLine(await agent.RunAsync("What are the top 3 things to do in Paris
 ### Streaming call
 
 ```csharp
-await foreach (var update in agent.RunStreamingAsync("Give me a one-sentence travel tip..."))
+var prompt2 = "Give me a one-sentence travel tip...";
+Console.WriteLine($"> {prompt2}");
+await foreach (var update in agent.RunStreamingAsync(prompt2))
 {
     Console.Write(update);
 }

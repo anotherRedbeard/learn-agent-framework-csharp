@@ -15,11 +15,15 @@ AIAgent agent = new AIProjectClient(new Uri(endpoint), new DefaultAzureCredentia
 
 // Non-streaming: get the complete response at once
 Console.WriteLine("--- Non-streaming ---");
-Console.WriteLine(await agent.RunAsync("What are the top 3 things to do in Paris?"));
+var prompt = "What are the top 3 things to do in Paris?";
+Console.WriteLine($"> {prompt}");
+Console.WriteLine(await agent.RunAsync(prompt));
 
 // Streaming: receive tokens as they are generated
 Console.WriteLine("\n--- Streaming ---");
-await foreach (var update in agent.RunStreamingAsync("Give me a one-sentence travel tip for first-time visitors to Tokyo."))
+var prompt2 = "Give me a one-sentence travel tip for first-time visitors to Tokyo.";
+Console.WriteLine($"> {prompt2}");
+await foreach (var update in agent.RunStreamingAsync(prompt2))
 {
     Console.Write(update);
 }

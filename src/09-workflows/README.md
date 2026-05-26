@@ -62,7 +62,10 @@ var workflow = builder.Build();
 ### Run the workflow
 
 ```csharp
-await using Run run = await InProcessExecution.RunAsync(workflow, "Paris, France!");
+var prompt = "Paris, France!";
+Console.WriteLine($"> {prompt}");
+
+await using Run run = await InProcessExecution.RunAsync(workflow, prompt);
 foreach (WorkflowEvent evt in run.NewEvents)
 {
     if (evt is ExecutorCompletedEvent executorComplete)

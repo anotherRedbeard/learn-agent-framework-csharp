@@ -83,7 +83,9 @@ AIAgent agent = new AIProjectClient(new Uri(endpoint), new DefaultAzureCredentia
 ### Let the framework handle the tool-calling loop
 
 ```csharp
-Console.WriteLine(await agent.RunAsync("I'm heading to Amsterdam next week. What's the weather like there?"));
+var prompt = "I'm heading to Amsterdam next week. What's the weather like there?";
+Console.WriteLine($"> {prompt}");
+Console.WriteLine(await agent.RunAsync(prompt));
 ```
 
 - You don't call `GetWeather` yourself — the model decides when the question requires it
@@ -93,7 +95,9 @@ Console.WriteLine(await agent.RunAsync("I'm heading to Amsterdam next week. What
 ### Allow multiple tool calls
 
 ```csharp
-Console.WriteLine(await agent.RunAsync("I'm flying to Tokyo tomorrow. What's the weather and local time there right now?"));
+var prompt2 = "I'm flying to Tokyo tomorrow. What's the weather and local time there right now?";
+Console.WriteLine($"> {prompt2}");
+Console.WriteLine(await agent.RunAsync(prompt2));
 ```
 
 - A single user message can require more than one tool call

@@ -76,10 +76,12 @@ PersistentAgent agent = await client.Administration.CreateAgentAsync(
 ```csharp
 PersistentAgentThread thread = await client.Threads.CreateThreadAsync();
 
+var prompt = "What are the top 3 things to do in Paris?";
+Console.WriteLine($"> {prompt}");
 await client.Messages.CreateMessageAsync(
     threadId: thread.Id,
     role: MessageRole.User,
-    content: "What are the top 3 things to do in Paris?");
+    content: prompt);
 ```
 
 - A **thread** is the server-side analog of `AgentSession` from Module 03 — it holds the conversation history.

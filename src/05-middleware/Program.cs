@@ -29,7 +29,9 @@ AIAgent agentWithMiddleware = baseAgent
     .Build();
 
 Console.WriteLine("--- Agent with middleware ---");
-Console.WriteLine(await agentWithMiddleware.RunAsync("I'm planning a trip to Paris. What's the weather like there?"));
+var prompt = "I'm planning a trip to Paris. What's the weather like there?";
+Console.WriteLine($"> {prompt}");
+Console.WriteLine(await agentWithMiddleware.RunAsync(prompt));
 
 // --- Agent Run Middleware ---
 // Wraps the full agent run. Can inspect/modify input and output.

@@ -28,6 +28,11 @@ AIAgent agent = new AIProjectClient(new Uri(endpoint), new DefaultAzureCredentia
 AgentSession session = await agent.CreateSessionAsync();
 
 // The agent will automatically load and use the visa-requirements skill
-Console.WriteLine(await agent.RunAsync("I'm a US citizen planning a trip to Japan. Do I need a visa?", session));
+var prompt = "I'm a US citizen planning a trip to Japan. Do I need a visa?";
+Console.WriteLine($"> {prompt}");
+Console.WriteLine(await agent.RunAsync(prompt, session));
 Console.WriteLine();
-Console.WriteLine(await agent.RunAsync("What about visiting France and Italy on the same trip?", session));
+
+var prompt2 = "What about visiting France and Italy on the same trip?";
+Console.WriteLine($"> {prompt2}");
+Console.WriteLine(await agent.RunAsync(prompt2, session));

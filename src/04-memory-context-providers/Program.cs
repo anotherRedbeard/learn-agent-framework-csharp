@@ -20,9 +20,17 @@ AIAgent agent = new AIProjectClient(new Uri(endpoint), new DefaultAzureCredentia
 
 AgentSession session = await agent.CreateSessionAsync();
 
-Console.WriteLine(await agent.RunAsync("I prefer window seats and always travel carry-on only.", session));
-Console.WriteLine(await agent.RunAsync("My home airport is Dallas Fort Worth.", session));
-Console.WriteLine(await agent.RunAsync("What do you know about my travel preferences so far?", session));  // Remembers preferences
+var prompt = "I prefer window seats and always travel carry-on only.";
+Console.WriteLine($"> {prompt}");
+Console.WriteLine(await agent.RunAsync(prompt, session));
+
+var prompt2 = "My home airport is Dallas Fort Worth.";
+Console.WriteLine($"> {prompt2}");
+Console.WriteLine(await agent.RunAsync(prompt2, session));
+
+var prompt3 = "What do you know about my travel preferences so far?";
+Console.WriteLine($"> {prompt3}");
+Console.WriteLine(await agent.RunAsync(prompt3, session));  // Remembers preferences
 
 // --- Example 2: Custom ChatHistoryProvider ---
 // You can provide your own implementation to store history in a database,
@@ -37,8 +45,13 @@ AIAgent agentWithCustomHistory = new AIProjectClient(new Uri(endpoint), new Defa
     });
 
 AgentSession session2 = await agentWithCustomHistory.CreateSessionAsync();
-Console.WriteLine(await agentWithCustomHistory.RunAsync("I need vegetarian meal options on my flights.", session2));
-Console.WriteLine(await agentWithCustomHistory.RunAsync("What dietary preference did I mention?", session2));
+var prompt4 = "I need vegetarian meal options on my flights.";
+Console.WriteLine($"> {prompt4}");
+Console.WriteLine(await agentWithCustomHistory.RunAsync(prompt4, session2));
+
+var prompt5 = "What dietary preference did I mention?";
+Console.WriteLine($"> {prompt5}");
+Console.WriteLine(await agentWithCustomHistory.RunAsync(prompt5, session2));
 
 // --- Custom ChatHistoryProvider implementation ---
 // Subclass ChatHistoryProvider and override two methods:

@@ -18,17 +18,25 @@ AgentSession session = await agent.CreateSessionAsync();
 
 // Turn 1 — establish trip context
 Console.WriteLine("Turn 1:");
-Console.WriteLine(await agent.RunAsync("I'm planning a 10-day trip to Japan in October. My home airport is Dallas.", session));
+var prompt = "I'm planning a 10-day trip to Japan in October. My home airport is Dallas.";
+Console.WriteLine($"> {prompt}");
+Console.WriteLine(await agent.RunAsync(prompt, session));
 
 // Turn 2 — agent remembers the Japan trip context
 Console.WriteLine("\nTurn 2:");
-Console.WriteLine(await agent.RunAsync("What are the must-see places in Kyoto?", session));
+var prompt2 = "What are the must-see places in Kyoto?";
+Console.WriteLine($"> {prompt2}");
+Console.WriteLine(await agent.RunAsync(prompt2, session));
 
 // Turn 3 — agent still has full context
 Console.WriteLine("\nTurn 3:");
-Console.WriteLine(await agent.RunAsync("Based on my trip, what should I pack for October weather in Japan?", session));
+var prompt3 = "Based on my trip, what should I pack for October weather in Japan?";
+Console.WriteLine($"> {prompt3}");
+Console.WriteLine(await agent.RunAsync(prompt3, session));
 
 // Without session — each call is completely independent
 Console.WriteLine("\n--- Without session (stateless) ---");
-Console.WriteLine(await agent.RunAsync("What should I pack for my trip?"));
+var prompt4 = "What should I pack for my trip?";
+Console.WriteLine($"> {prompt4}");
+Console.WriteLine(await agent.RunAsync(prompt4));
 // Will say: "I don't have any information about your trip."

@@ -34,9 +34,13 @@ AIAgent agent = new AIProjectClient(new Uri(endpoint), new DefaultAzureCredentia
         ]);
 
 // The agent will automatically call GetWeather when relevant
-Console.WriteLine(await agent.RunAsync("I'm heading to Amsterdam next week. What's the weather like there?"));
+var prompt = "I'm heading to Amsterdam next week. What's the weather like there?";
+Console.WriteLine($"> {prompt}");
+Console.WriteLine(await agent.RunAsync(prompt));
 
 Console.WriteLine();
 
 // The agent may call multiple tools in a single turn
-Console.WriteLine(await agent.RunAsync("I'm flying to Tokyo tomorrow. What's the weather and local time there right now?"));
+var prompt2 = "I'm flying to Tokyo tomorrow. What's the weather and local time there right now?";
+Console.WriteLine($"> {prompt2}");
+Console.WriteLine(await agent.RunAsync(prompt2));

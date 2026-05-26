@@ -24,10 +24,12 @@ PersistentAgentThread thread = await client.Threads.CreateThreadAsync();
 Console.WriteLine($"Created thread: {thread.Id}");
 
 // 3. Post a user message to the thread.
+var prompt = "What are the top 3 things to do in Paris?";
+Console.WriteLine($"> {prompt}");
 await client.Messages.CreateMessageAsync(
     threadId: thread.Id,
     role: MessageRole.User,
-    content: "What are the top 3 things to do in Paris?");
+    content: prompt);
 
 // 4. Kick off a run and poll until it reaches a terminal state.
 ThreadRun run = await client.Runs.CreateRunAsync(thread.Id, agent.Id);

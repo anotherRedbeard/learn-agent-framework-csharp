@@ -40,23 +40,26 @@ catch (HttpRequestException)
 // The A2A message format wraps your text in a structured envelope.
 // contextId ties messages to a conversation — reuse it to maintain history.
 Console.WriteLine("\n=== Step 2: Send a message to the Weather Agent ===");
-var response1 = await SendA2AMessage(http, "/a2a/weather/v1/message:stream",
-    "What is the weather like in Amsterdam this time of year?", contextId);
+var prompt = "What is the weather like in Amsterdam this time of year?";
+Console.WriteLine($"> {prompt}");
+var response1 = await SendA2AMessage(http, "/a2a/weather/v1/message:stream", prompt, contextId);
 Console.WriteLine($"Agent: {response1}");
 
 // --- Step 3: Follow-up in the same conversation ---
 // By reusing the same contextId, the agent remembers the previous exchange.
 Console.WriteLine("\n=== Step 3: Follow-up (same contextId = same conversation) ===");
-var response2 = await SendA2AMessage(http, "/a2a/weather/v1/message:stream",
-    "What should I pack for the weather there?", contextId);
+var prompt2 = "What should I pack for the weather there?";
+Console.WriteLine($"> {prompt2}");
+var response2 = await SendA2AMessage(http, "/a2a/weather/v1/message:stream", prompt2, contextId);
 Console.WriteLine($"Agent: {response2}");
 
 // --- Step 4: Try the workflow endpoint ---
 // Module 10 exposes a sequential workflow: weather agent → travel agent.
 // From the client's perspective it looks exactly like a single agent.
 Console.WriteLine("\n=== Step 4: Call the sequential workflow (weather → travel) ===");
-var response3 = await SendA2AMessage(http, "/a2a/trip-planning/v1/message:stream",
-    "Help me plan a 3-day trip to Amsterdam in October.", "trip-planning-demo-1");
+var prompt3 = "Help me plan a 3-day trip to Amsterdam in October.";
+Console.WriteLine($"> {prompt3}");
+var response3 = await SendA2AMessage(http, "/a2a/trip-planning/v1/message:stream", prompt3, "trip-planning-demo-1");
 Console.WriteLine($"Agent: {response3}");
 
 // Helper: sends an A2A message and returns the agent's text response

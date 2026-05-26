@@ -53,9 +53,17 @@ AgentSession session = await agent.CreateSessionAsync();
 ### Add facts to memory
 
 ```csharp
-Console.WriteLine(await agent.RunAsync("I prefer window seats and always travel carry-on only.", session));
-Console.WriteLine(await agent.RunAsync("My home airport is Dallas Fort Worth.", session));
-Console.WriteLine(await agent.RunAsync("What do you know about my travel preferences so far?", session));
+var prompt = "I prefer window seats and always travel carry-on only.";
+Console.WriteLine($"> {prompt}");
+Console.WriteLine(await agent.RunAsync(prompt, session));
+
+var prompt2 = "My home airport is Dallas Fort Worth.";
+Console.WriteLine($"> {prompt2}");
+Console.WriteLine(await agent.RunAsync(prompt2, session));
+
+var prompt3 = "What do you know about my travel preferences so far?";
+Console.WriteLine($"> {prompt3}");
+Console.WriteLine(await agent.RunAsync(prompt3, session));
 ```
 
 - Each call passes the same `session`, so the facts accumulate in shared history

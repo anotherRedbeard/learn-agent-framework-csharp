@@ -25,9 +25,10 @@ builder.AddEdge(uppercase, reverse).WithOutputFrom(reverse);
 var workflow = builder.Build();
 
 Console.WriteLine("=== Example 1: Deterministic Workflow ===");
-Console.WriteLine("Input: 'Paris, France!'");
+var prompt = "Paris, France!";
+Console.WriteLine($"> {prompt}");
 
-await using Run run = await InProcessExecution.RunAsync(workflow, "Paris, France!");
+await using Run run = await InProcessExecution.RunAsync(workflow, prompt);
 foreach (WorkflowEvent evt in run.NewEvents)
 {
     if (evt is ExecutorCompletedEvent executorComplete)
