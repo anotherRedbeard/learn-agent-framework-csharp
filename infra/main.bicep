@@ -117,10 +117,10 @@ resource roleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = i
 // See docs/prerequisites.md for how to set them.
 
 @description('Set this as AZURE_OPENAI_ENDPOINT in dotnet user-secrets.')
-output AZURE_OPENAI_ENDPOINT string = '${foundryAccount.properties.endpoint}api/projects/${foundryProject.name}'
+output azureOpenaiEndpoint string = '${foundryAccount.properties.endpoint}api/projects/${foundryProject.name}'
 
 @description('Set this as AZURE_OPENAI_DEPLOYMENT_NAME in dotnet user-secrets.')
-output AZURE_OPENAI_DEPLOYMENT_NAME string = modelDeployment.name
+output azureOpenaiDeploymentName string = modelDeployment.name
 
 @description('The project will be visible at https://ai.azure.com under this name.')
-output PROJECT_NAME string = foundryProject.name
+output projectName string = foundryProject.name

@@ -47,12 +47,12 @@ The full JSON output is verbose — use this to extract just the two values you 
 ENDPOINT=$(az deployment group show \
   --resource-group rg-tripbot \
   --name main \
-  --query "properties.outputs.AZURE_OPENAI_ENDPOINT.value" -o tsv)
+  --query "properties.outputs.azureOpenaiEndpoint.value" -o tsv)
 
 DEPLOYMENT=$(az deployment group show \
   --resource-group rg-tripbot \
   --name main \
-  --query "properties.outputs.AZURE_OPENAI_DEPLOYMENT_NAME.value" -o tsv)
+  --query "properties.outputs.azureOpenaiDeploymentName.value" -o tsv)
 
 echo "AZURE_OPENAI_ENDPOINT:        $ENDPOINT"
 echo "AZURE_OPENAI_DEPLOYMENT_NAME: $DEPLOYMENT"
