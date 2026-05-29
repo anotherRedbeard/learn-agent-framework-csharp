@@ -144,11 +144,68 @@ dotnet run                           # will fail — that's expected, fill in th
 
 ---
 
+## Stretch — Chat-client middleware (the third layer)
+
+There is a **third** middleware extensibility point you haven't seen yet, and it lives one layer below the agent: on the underlying `IChatClient`. The full picture looks like this:
+
+```
+[Agent middleware]         ← agent.AsBuilder().Use(...)        wraps RunAsync / RunStreamingAsync
+    ↓
+[Function middleware]      ← agent.AsBuilder().Use(funcMw)     wraps each tool call
+    ↓
+[Chat-client middleware]   ← chatClient.AsBuilder().Use(...)   wraps the raw LLM HTTP call
+    ↓
+[Raw LLM call]
+```
+
+The key point: **chat-client middleware is attached to the `IChatClient`, not the agent.** You build it up *before* you construct the agent, then hand the wrapped client over.
+
+```csharp
+// Build the chat client with its own middleware pipeline first.
+IChatClient chatClient = new AzureOpenAIClient(new Uri(endpoint), new DefaultAzureCredential())
+    .GetChatClient(deploymentName)
+    .AsIChatClient()
+    .AsBuilder()
+        .UseLogging(loggerFactory)        // built-in: logs raw LLM requests/responses
+        .UseOpenTelemetry(...)            // built-in: distributed tracing
+        .UseDistributedCache(cache)       // built-in: cache identical LLM calls
+        .Use(async (messages, options, innerClient, ct) =>
+        {
+            var response = await innerClient.GetResponseAsync(messages, options, ct);
+            // response.Usage has REAL token counts from the model — no estimation needed.
+            Console.WriteLine($"  [ChatClient] tokens in={response.Usage?.InputTokenCount} out={response.Usage?.OutputTokenCount}");
+            return response;
+        })
+    .Build();
+
+// Then create the agent using the already-wrapped client.
+AIAgent agent = chatClient.CreateAIAgent(
+    instructions: "You are TripBot, a travel planning assistant.",
+    tools: [AIFunctionFactory.Create(GetWeather)]);
+```
+
+### Where to put what
+
+| Concern | Best layer | Why |
+|---|---|---|
+| Cost/token tracking (real) | Chat-client | Only this layer sees `response.Usage` from the model |
+| Cost estimate before call | Agent | Runs once per turn, before the LLM is hit |
+| Tool authorization | Function | Per-call hook with arg/result access |
+| Conversation logging | Agent | Sees the full message history and final response |
+| Response caching | Chat-client | Caches at the LLM call so identical prompts skip the model |
+| Retries on rate-limit | Chat-client | Closest to the HTTP call |
+| OpenTelemetry tracing | Chat-client | Built-in `UseOpenTelemetry()` helper |
+| Mocking tools in tests | Function | Replace `next(...)` with a fake result |
+
+> **Rule of thumb:** put middleware at the **lowest layer** that has the data it needs. Cost tracking needs real `Usage`, so it belongs on the chat client. Tool authorization needs the function context, so it belongs on the function pipeline. Run-level concerns (full conversation, session state) belong on the agent.
+
+---
+
 ## Key concepts
 
 ### What middleware intercepts
 
-Middleware can wrap a full agent run, a streaming run, or an individual function invocation. Use the narrowest interception point that matches the behavior you need.
+Middleware can wrap a full agent run, a streaming run, an individual function invocation, or the underlying chat-client call. Use the narrowest interception point that matches the behavior you need.
 
 ### What `.AsBuilder().Use(...)` adds
 
