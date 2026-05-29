@@ -24,13 +24,13 @@ Console.WriteLine(await agent.RunAsync(prompt, session));
 
 // Turn 2 — agent remembers the Japan trip context
 Console.WriteLine("\nTurn 2:");
-var prompt2 = "What are the must-see places in Kyoto?";
+var prompt2 = "What are the must-see places where I am going?";
 Console.WriteLine($"> {prompt2}");
 Console.WriteLine(await agent.RunAsync(prompt2, session));
 
 // Turn 3 — agent still has full context
 Console.WriteLine("\nTurn 3:");
-var prompt3 = "Based on my trip, what should I pack for October weather in Japan?";
+var prompt3 = "Based on my trip, what should I pack for October weather?";
 Console.WriteLine($"> {prompt3}");
 Console.WriteLine(await agent.RunAsync(prompt3, session));
 
