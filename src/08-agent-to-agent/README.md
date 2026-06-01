@@ -144,21 +144,28 @@ Console.WriteLine($"Agent: {await SendAndExtractText(tripPlanningClient, prompt3
 
 Work through these challenges in order. Each one builds on the previous.
 
-### 🟢 Starter — Tweak an AgentCard's metadata
+### 🟢 Starter — Call the travel agent directly
 
-In Module 10, find the `MapAgentWithCard` helper near the bottom of `Program.cs` and change the Weather Agent's name, description, or version on the `AgentCard` it builds. Restart Module 10, rerun this module, and verify the discovered AgentCard output changed.
+Module 10 also exposes the travel agent on its own at `/a2a/travel`. Add a new `A2AHttpJsonClient` for it in `Program.cs`, call it once via `SendAndExtractText` (use a fresh `contextId`), and print the reply. You should be able to reuse the same `HttpClient` and the same helper — this proves a single client process can speak to many A2A agents the same way.
 
-> **Why is the card built there and not on `AddAIAgent`?** The current preview of `MapA2AHttpJson` hardcodes `Name = "A2A Agent"` and has no card hook. Module 10 works around this by calling the lower-level `MapHttpA2A(server, card, path)` so we control the card.
+> **Hint:** Add a `travelAgentPath` constant near the other path constants and follow the trip-planning pattern at the bottom of `Program.cs`.
 
-### 🟡 Intermediate — Add another A2A agent
+### 🟡 Intermediate — Switch one call to streaming
 
-Expose a second A2A agent from Module 10, then add a new `GET /card` discovery call and `message:stream` call in this client. Confirm that both agents can be called through the same `HttpClient`.
+Replace one of your `SendMessageAsync` calls (inside the helper, or in a new helper) with `SendStreamingMessageAsync`. It returns an `IAsyncEnumerable<SendStreamingMessageResponse>` — iterate it with `await foreach` and `Console.Write` text from each event as it arrives so you see the agent type its response in real time.
 
-### 🔴 Stretch — Discover and call an agent via AgentCard
+> **Hint:** Each streaming event mirrors the non-streaming `SendMessageResponse` shape — peek at `evt.Message?.Parts` (or `evt.Task?.Status?.Message?.Parts`) and write any text parts you find.
 
-Instead of hardcoding the message endpoint, fetch an AgentCard first and use information from the card to decide which agent to call. Build a tiny routing step that discovers an agent, prints its metadata, then sends a message to the selected endpoint.
+### 🔴 Stretch — Route to an agent dynamically from its AgentCard
 
-> **Hint:** You're building the foundation for multi-agent systems that can discover capabilities dynamically instead of relying on compile-time references.
+Today the client hardcodes which endpoint matches which user prompt. Make that decision data-driven instead:
+
+1. Use `A2ACardResolver` to fetch all three cards (`/a2a/weather/card`, `/a2a/travel/card`, `/a2a/trip-planning/card`) and store them in a list alongside each agent's base URL.
+2. Take a user prompt at the console.
+3. Pick the best agent by matching keywords from the prompt against each card's `Name` and `Description` (a simple `string.Contains` heuristic is enough — no LLM needed).
+4. Build an `A2AHttpJsonClient` for the chosen agent on the fly and send the message.
+
+> **Hint:** This is the foundation for multi-agent systems that discover capabilities at runtime instead of pinning them at compile time. The same idea scales to a registry of cards fetched from many services.
 
 ---
 
