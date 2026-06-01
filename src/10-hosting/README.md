@@ -22,14 +22,26 @@ Hosted agents are the right pattern when:
 
 ## Step 1 — Run it first
 
+This module reads `AZURE_OPENAI_ENDPOINT` and `AZURE_OPENAI_DEPLOYMENT_NAME` from `builder.Configuration`, which checks **both** environment variables and `dotnet user-secrets`. If you already exported them in your shell (see [`docs/prerequisites.md`](../../docs/prerequisites.md)), they're already in scope and you can skip straight to `dotnet run`.
+
+If you'd rather scope credentials to this project only, set them via user-secrets:
+
 ```bash
 cd src/10-hosting
 dotnet user-secrets set "AZURE_OPENAI_ENDPOINT" "https://your-project.services.ai.azure.com"
 dotnet user-secrets set "AZURE_OPENAI_DEPLOYMENT_NAME" "gpt-4o-mini"
+```
+
+> User-secrets are **per-project** — each module has its own keyring — while exported environment variables apply across every module in the same shell session.
+
+Then start the host:
+
+```bash
+cd src/10-hosting
 dotnet run
 ```
 
-Then open `requests.http` and send the AgentCard and message requests. You should see hosted endpoints for the weather agent, travel agent, and trip-planning workflow.
+Open `requests.http` and send the AgentCard and message requests. You should see hosted endpoints for the weather agent, travel agent, and trip-planning workflow.
 
 ---
 
