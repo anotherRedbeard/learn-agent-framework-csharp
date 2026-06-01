@@ -11,6 +11,11 @@
     <Compile Remove="*.scaffold.cs" />
   </ItemGroup>
 
-  <!-- No Agent Framework packages needed here — this is a plain HTTP client.
-       A2A is just JSON over HTTP. Any language or framework can call it. -->
+  <!-- The A2A package provides a typed client (A2AHttpJsonClient, A2ACardResolver)
+       that handles the protocol wire format for us. A2A is just JSON over HTTP, so
+       any language can call it — but using the official client keeps us in sync with
+       the protocol as it evolves. -->
+  <ItemGroup>
+    <PackageReference Include="A2A" Version="*-*" />
+  </ItemGroup>
 </Project>

@@ -10,6 +10,8 @@
 // ============================================================
 
 // TODO: Add using statements for:
+//   - A2A
+//   - A2A.AspNetCore
 //   - Azure.AI.Projects
 //   - Azure.Identity
 //   - Microsoft.Agents.AI
@@ -40,14 +42,14 @@ IChatClient chatClient = null!;
 // TODO: Register the chat client as a keyed singleton named "chat-model".
 
 
-// TODO: Register a weather agent with AddAIAgent().
+// TODO: Register a weather agent with AddAIAgent(), then chain .AddA2AServer() so it can be exposed over A2A.
 //       - Key: "weather"
 //       - Instructions: answer destination weather questions for travelers
 //       - Description: explain that it provides weather conditions for travel destinations
 //       - chatClientServiceKey: "chat-model"
 var weatherAgent = null!;
 
-// TODO: Register a travel agent with AddAIAgent().
+// TODO: Register a travel agent with AddAIAgent(), then chain .AddA2AServer() so it can be exposed over A2A.
 //       - Key: "travel"
 //       - Instructions: create day-by-day itineraries and practical travel tips
 //       - Description: explain that it creates travel itineraries and recommendations
@@ -58,16 +60,22 @@ var travelAgent = null!;
 //       Resolve the weather and travel agents from DI by key, then build a sequential workflow.
 var planningWorkflow = null!;
 
-// TODO: Convert the workflow to an AIAgent so it can be hosted over A2A.
+// TODO: Convert the workflow to an AIAgent so it can be hosted over A2A, then chain .AddA2AServer().
 var planningWorkflowAsAgent = null!;
 
 // TODO: Build the app.
 var app = null!;
 
-// TODO: Map each agent to an A2A HTTP-JSON endpoint.
-//       - weather -> /a2a/weather
-//       - travel -> /a2a/travel
-//       - trip-planning workflow agent -> /a2a/trip-planning
+// TODO: Map each agent to an A2A HTTP-JSON endpoint with a populated AgentCard.
+//       The convenience MapA2AHttpJson hardcodes Name = "A2A Agent" with no card hook,
+//       so write a small helper that:
+//         1. Resolves the keyed A2AServer from DI: app.Services.GetRequiredKeyedService<A2AServer>(agentName)
+//         2. Builds an AgentCard { Name, Description, Version }
+//         3. Calls app.MapHttpA2A(server, card, path) from A2A.AspNetCore
+//       Map:
+//         - weather -> /a2a/weather
+//         - travel -> /a2a/travel
+//         - trip-planning workflow agent -> /a2a/trip-planning
 
 
 // TODO: Run the app.

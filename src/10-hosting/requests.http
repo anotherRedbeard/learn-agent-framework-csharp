@@ -1,11 +1,11 @@
 @baseAddress = http://localhost:5000
 
 ### Get AgentCard for weather agent (agent discovery)
-GET {{baseAddress}}/a2a/weather/v1/card
+GET {{baseAddress}}/a2a/weather/card
 
 ### Ask the weather agent (non-streaming)
 # contextId maintains conversation history — reuse the same ID for follow-up questions
-POST {{baseAddress}}/a2a/weather/v1/message:stream
+POST {{baseAddress}}/a2a/weather/message:stream
 Content-Type: application/json
 
 {
@@ -25,7 +25,7 @@ Content-Type: application/json
 }
 
 ### Follow-up in the same conversation (reuses contextId)
-POST {{baseAddress}}/a2a/weather/v1/message:stream
+POST {{baseAddress}}/a2a/weather/message:stream
 Content-Type: application/json
 
 {
@@ -45,7 +45,7 @@ Content-Type: application/json
 }
 
 ### Ask the travel agent
-POST {{baseAddress}}/a2a/travel/v1/message:stream
+POST {{baseAddress}}/a2a/travel/message:stream
 Content-Type: application/json
 
 {
@@ -65,7 +65,7 @@ Content-Type: application/json
 }
 
 ### Use the sequential workflow (weather agent → travel agent)
-POST {{baseAddress}}/a2a/trip-planning/v1/message:stream
+POST {{baseAddress}}/a2a/trip-planning/message:stream
 Content-Type: application/json
 
 {

@@ -62,15 +62,19 @@ var weatherAgent = builder.AddAIAgent(
     "weather",
     instructions: "You are a destination weather expert...",
     description: "Provides weather conditions for travel destinations.",
-    chatClientServiceKey: "chat-model");
+    chatClientServiceKey: "chat-model")
+    .AddA2AServer();
 ```
 
 - `AddAIAgent()` registers the agent in dependency injection instead of creating it inline
 - The first argument becomes the agent key used by DI and hosting
 - `instructions` define the agent's behavior for every request
 - `description` becomes part of the hosted agent metadata
+- `.AddA2AServer()` registers an `A2AServer` in DI for this agent — required before `MapA2AHttpJson()` can wire up the HTTP endpoint
 
 > **Why not create the agent directly?** Hosted agents should participate in the ASP.NET Core DI lifecycle. `AddAIAgent()` lets agents share configured services, keyed clients, and deployment-time configuration.
+
+> **Why is `.AddA2AServer()` separate from `MapA2AHttpJson()`?** Registration (DI) and routing (HTTP) are deliberately split. `.AddA2AServer()` makes the agent *available* over A2A; `MapA2AHttpJson()` *exposes* it at a URL. This lets the same A2A server back multiple transports (HTTP-JSON, JSON-RPC) or stay headless if you don't need HTTP at all.
 
 ### Register a workflow as an agent
 
@@ -82,26 +86,45 @@ var planningWorkflow = builder.AddWorkflow("trip-planning", (sp, key) =>
     return AgentWorkflowBuilder.BuildSequential(key, [weather, travel]);
 });
 
-var planningWorkflowAsAgent = planningWorkflow.AddAsAIAgent();
+var planningWorkflowAsAgent = planningWorkflow.AddAsAIAgent()
+    .AddA2AServer();
 ```
 
 - `AddWorkflow()` registers a workflow that composes multiple agents
 - `GetRequiredKeyedService<AIAgent>()` resolves the hosted agents from DI
 - `BuildSequential()` sends the request through weather first, then travel
 - `AddAsAIAgent()` wraps the workflow so it can be exposed through A2A like any other agent
+- `.AddA2AServer()` registers the workflow-as-agent for A2A just like a regular agent
 
 ### Expose A2A endpoints
 
 ```csharp
-app.MapA2AHttpJson(weatherAgent, "/a2a/weather");
-app.MapA2AHttpJson(travelAgent, "/a2a/travel");
-app.MapA2AHttpJson(planningWorkflowAsAgent, "/a2a/trip-planning");
+MapAgentWithCard(app, "weather", "/a2a/weather",
+    description: "Provides weather conditions for travel destinations.");
+MapAgentWithCard(app, "travel", "/a2a/travel",
+    description: "Creates travel itineraries and trip recommendations.");
+MapAgentWithCard(app, "trip-planning", "/a2a/trip-planning",
+    description: "Sequential workflow: gathers weather, then builds a trip itinerary.");
+
+// ...
+
+static void MapAgentWithCard(WebApplication app, string agentName, string path, string description)
+{
+    var server = app.Services.GetRequiredKeyedService<A2AServer>(agentName);
+    var card = new AgentCard { Name = agentName, Description = description, Version = "1.0.0" };
+    app.MapHttpA2A(server, card, path);
+}
 ```
 
-- `MapA2AHttpJson()` maps A2A HTTP-JSON routes for each hosted agent — this is the `MapA2A` hosting step in this module
-- `GET /a2a/weather/v1/card` returns the weather agent's `AgentCard`
-- `POST /a2a/weather/v1/message:stream` sends a message to the weather agent
+- We *would* call `app.MapA2AHttpJson(agent, path)` here, but the current preview of that helper hardcodes `AgentCard { Name = "A2A Agent" }` and offers no card hook
+- `MapAgentWithCard` drops down to `A2A.AspNetCore`'s `MapHttpA2A(server, card, path)`, supplying a real `AgentCard` so clients see meaningful name/description/version
+- `GET /a2a/weather/card` returns that `AgentCard`
+- `POST /a2a/weather/message:stream` sends a message to the weather agent
 - A2A clients use the `AgentCard` to discover the agent before sending messages
+
+> **Why not just use `MapA2AHttpJson()`?** It's the right API surface but the
+> preview library doesn't expose a card-customization callback yet. Once it does,
+> swap `MapAgentWithCard` for `app.MapA2AHttpJson(agent, path, configureCard: ...)`.
 
 ### Keep context over HTTP
 
@@ -121,11 +144,11 @@ Work through these challenges in order. Each one builds on the previous.
 
 ### 🟢 Starter — Change an AgentCard's metadata
 
-Edit one hosted agent's `description` in `Program.cs`. Run the app, request that agent's card from `requests.http`, and verify the metadata changed.
+Edit one of the `MapAgentWithCard(...)` calls in `Program.cs` (or change `Version` inside the helper). Run the app, request that agent's card from `requests.http`, and verify the metadata changed.
 
 ### 🟡 Intermediate — Add a new hosted agent
 
-Register a third agent with `AddAIAgent()` and expose it with `MapA2AHttpJson()` at its own endpoint, such as `/a2a/packing`. Add matching requests to `requests.http` and verify its `AgentCard`, `contextId`, and message endpoint work.
+Register a third agent with `AddAIAgent()`, chain `.AddA2AServer()`, and expose it with `MapAgentWithCard()` at its own endpoint, such as `/a2a/packing`. Add matching requests to `requests.http` and verify its `AgentCard`, `contextId`, and message endpoint work.
 
 ### 🔴 Stretch — Add an API key check
 
@@ -172,7 +195,9 @@ An ASP.NET Core host gives your agent HTTP endpoints, dependency injection, conf
 
 ❌ **Changing `contextId` on every request** — the agent will treat each call as a brand-new conversation.
 
-❌ **Exposing a workflow directly** — wrap workflows with `AddAsAIAgent()` before mapping them to A2A.
+❌ **Forgetting `.AddA2AServer()`** — `MapA2AHttpJson()` will throw at startup ("No A2AServer is registered for agent 'X'"). Registration in DI and routing on the endpoint are two separate steps.
+
+❌ **Exposing a workflow directly** — wrap workflows with `AddAsAIAgent()` (and chain `.AddA2AServer()`) before mapping them to A2A.
 
 ## References
 

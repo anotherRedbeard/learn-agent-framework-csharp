@@ -1,3 +1,5 @@
+using A2A;
+using A2A.AspNetCore;
 using Azure.AI.Projects;
 using Azure.Identity;
 using Microsoft.Agents.AI;
@@ -32,13 +34,15 @@ var weatherAgent = builder.AddAIAgent(
     "weather",
     instructions: "You are a destination weather expert. When given a travel destination, provide current conditions and advice on whether the weather is suitable for travel.",
     description: "Provides weather conditions for travel destinations.",
-    chatClientServiceKey: "chat-model");
+    chatClientServiceKey: "chat-model")
+    .AddA2AServer();
 
 var travelAgent = builder.AddAIAgent(
     "travel",
     instructions: "You are TripBot, a travel itinerary planner. Given a destination and trip context, create helpful day-by-day itineraries, suggest activities, and provide practical travel tips.",
     description: "Creates travel itineraries and trip recommendations.",
-    chatClientServiceKey: "chat-model");
+    chatClientServiceKey: "chat-model")
+    .AddA2AServer();
 
 // Register a sequential workflow: weather → travel
 // The user's request goes to the weather agent first, then the travel agent builds on it.
@@ -50,15 +54,35 @@ var planningWorkflow = builder.AddWorkflow("trip-planning", (sp, key) =>
 });
 
 // Workflows don't natively support A2A — wrap as an AIAgent first
-var planningWorkflowAsAgent = planningWorkflow.AddAsAIAgent();
+var planningWorkflowAsAgent = planningWorkflow.AddAsAIAgent()
+    .AddA2AServer();
 
 var app = builder.Build();
 
 // Expose each agent via A2A (HTTP-JSON transport).
-// contextId in the request maintains conversation history across calls.
-// Use requests.http to test these endpoints once the app is running.
-app.MapA2AHttpJson(weatherAgent, "/a2a/weather");
-app.MapA2AHttpJson(travelAgent, "/a2a/travel");
-app.MapA2AHttpJson(planningWorkflowAsAgent, "/a2a/trip-planning");
+// We use MapHttpA2A directly (instead of the convenience MapA2AHttpJson) so we can
+// supply a real AgentCard — the convenience overload hardcodes Name = "A2A Agent".
+// AgentCards are the discovery document any A2A client (see Module 08) reads first.
+MapAgentWithCard(app, "weather", "/a2a/weather",
+    description: "Provides weather conditions for travel destinations.");
+MapAgentWithCard(app, "travel", "/a2a/travel",
+    description: "Creates travel itineraries and trip recommendations.");
+MapAgentWithCard(app, "trip-planning", "/a2a/trip-planning",
+    description: "Sequential workflow: gathers weather, then builds a trip itinerary.");
 
 app.Run();
+
+// Resolves the keyed A2AServer registered by .AddA2AServer() and maps it with
+// a populated AgentCard. The MS hosting library doesn't expose a card hook yet,
+// so we drop down to the A2A.AspNetCore primitive.
+static void MapAgentWithCard(WebApplication app, string agentName, string path, string description)
+{
+    var server = app.Services.GetRequiredKeyedService<A2AServer>(agentName);
+    var card = new AgentCard
+    {
+        Name = agentName,
+        Description = description,
+        Version = "1.0.0",
+    };
+    app.MapHttpA2A(server, card, path);
+}

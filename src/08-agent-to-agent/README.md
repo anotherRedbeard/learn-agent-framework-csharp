@@ -43,62 +43,90 @@ Open `Program.cs` and read through it alongside these explanations.
 ### Connect to the A2A server
 
 ```csharp
+using A2A;
+
 const string baseAddress = "http://localhost:5000";
+const string weatherAgentPath = "/a2a/weather";
 const string contextId = "a2a-demo-conversation-1";
 
-using var http = new HttpClient { BaseAddress = new Uri(baseAddress) };
+using var http = new HttpClient();
 ```
 
-- `baseAddress` points to the service that hosts A2A agents
-- `HttpClient` is enough — this module does not need Agent Framework packages
+- `baseAddress` points to the service that hosts A2A agents (Module 10)
+- The `A2A` package provides typed clients so we don't hand-roll the protocol envelope
 - `contextId` is the conversation identifier you reuse across requests
 
-> **Why plain HTTP?** A2A is designed for interoperability. A .NET client, Python client, shell script, or browser app can all call the same agent if they can send JSON over HTTP.
+> **Why use the typed client?** A2A is "just JSON over HTTP", but the wire format
+> evolves with the spec. `A2ACardResolver` and `A2AHttpJsonClient` keep us in sync
+> automatically — and the server in Module 10 uses the same package, so both sides
+> always agree.
 
 ### Discover the agent
 
 ```csharp
-var card = await http.GetFromJsonAsync<JsonElement>("/a2a/weather/v1/card");
-Console.WriteLine($"Agent name:    {card.GetProperty("name")}");
-Console.WriteLine($"Description:   {card.GetProperty("description")}");
-Console.WriteLine($"Version:       {card.GetProperty("version")}");
+var resolver = new A2ACardResolver(
+    baseUrl: new Uri(baseAddress),
+    httpClient: http,
+    agentCardPath: $"{weatherAgentPath}/card");
+
+AgentCard card = await resolver.GetAgentCardAsync();
+Console.WriteLine($"Agent name:    {card.Name}");
+Console.WriteLine($"Description:   {card.Description}");
+Console.WriteLine($"Version:       {card.Version}");
 ```
 
 - The **AgentCard** tells clients what agent they are calling
-- Metadata such as `name`, `description`, and `version` helps clients route or display agents
+- Metadata such as `Name`, `Description`, and `Version` helps clients route or display agents
 - Fetching the card first is the A2A equivalent of discovering a service contract
+
+> **URL gotcha:** `A2ACardResolver` joins `baseUrl + agentCardPath` using standard
+> `Uri` rules. A leading `/` on the path **replaces** the entire baseUrl path, so we
+> pass the host as `baseUrl` and the full `/a2a/weather/card` path as `agentCardPath`.
 
 ### Send an A2A message
 
 ```csharp
-var payload = new
-{
-    message = new
-    {
-        kind = "message",
-        role = "user",
-        parts = new[] { new { kind = "text", text, metadata = new { } } },
-        messageId = (string?)null,
-        contextId
-    }
-};
+var weatherClient = new A2AHttpJsonClient(
+    new Uri($"{baseAddress}{weatherAgentPath}"), http);
+
+var response = await weatherClient.SendMessageAsync(
+    "What is the weather like in Amsterdam this time of year?",
+    Role.User,
+    contextId);
 ```
 
-- `kind` describes the envelope type
-- `role` tells the remote agent who sent the message
-- `parts` holds the actual content, such as text
-- `messageId` can be null when you want the server to assign one
-- `contextId` ties multiple requests to the same conversation
+- `A2AHttpJsonClient` is the typed client for the A2A HTTP+JSON binding
+- `SendMessageAsync` wraps the protocol envelope (`kind`, `role`, `parts`, `messageId`) for you
+- `Role.User` identifies the sender; the response will carry `Role.Agent`
+- `contextId` ties multiple requests into one conversation — reuse it for follow-ups
+
+### Extract the reply
+
+```csharp
+var message = response.Message
+    ?? response.Task?.Status?.Message
+    ?? response.Task?.History?.LastOrDefault();
+
+var text = string.Concat(message?.Parts?.Select(p => p.Text) ?? []);
+```
+
+- A `SendMessageResponse` may carry either a direct `Message` (synchronous reply) or
+  a `Task` (long-running work with status and history) — we handle both
+- `Message.Parts` is a list of content parts; `.Text` returns the text payload (empty for non-text parts)
 
 ### Call another endpoint the same way
 
 ```csharp
-var prompt3 = "Help me plan a 3-day trip to Amsterdam in October.";
-Console.WriteLine($"> {prompt3}");
-var response3 = await SendA2AMessage(http, "/a2a/trip-planning/v1/message:stream", prompt3, "trip-planning-demo-1");
+var tripPlanningClient = new A2AHttpJsonClient(
+    new Uri($"{baseAddress}/a2a/trip-planning"), http);
+
+var response = await tripPlanningClient.SendMessageAsync(
+    "Help me plan a 3-day trip to Amsterdam in October.",
+    Role.User,
+    "trip-planning-demo-1");
 ```
 
-- The trip-planning endpoint may be a workflow behind the scenes
+- The trip-planning endpoint is a **sequential workflow** behind the scenes (weather → travel)
 - From the client perspective, it still looks like one A2A agent
 - This is the key benefit: implementation details stay behind the protocol boundary
 
@@ -110,7 +138,9 @@ Work through these challenges in order. Each one builds on the previous.
 
 ### 🟢 Starter — Tweak an AgentCard's metadata
 
-In Module 10, find the Weather Agent's A2A hosting configuration and change metadata such as its name, description, or version. Restart Module 10, rerun this module, and verify the discovered AgentCard output changed.
+In Module 10, find the `MapAgentWithCard` helper near the bottom of `Program.cs` and change the Weather Agent's name, description, or version on the `AgentCard` it builds. Restart Module 10, rerun this module, and verify the discovered AgentCard output changed.
+
+> **Why is the card built there and not on `AddAIAgent`?** The current preview of `MapA2AHttpJson` hardcodes `Name = "A2A Agent"` and has no card hook. Module 10 works around this by calling the lower-level `MapHttpA2A(server, card, path)` so we control the card.
 
 ### 🟡 Intermediate — Add another A2A agent
 
