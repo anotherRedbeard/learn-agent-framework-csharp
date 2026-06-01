@@ -85,9 +85,22 @@ foreach (WorkflowEvent evt in run.NewEvents)
 
 Work through these challenges in order. Each one builds on the previous.
 
-### 🟢 Starter — Change an executor's prompt
+### 🟢 Starter — Reshape the text an executor passes downstream
 
-Pretend the uppercase executor is a prompt-shaped transformation. Change it from uppercase to a travel-friendly prefix, such as `Destination: {text}`. Run it and verify the reverse step receives your changed output.
+In real workflows, the first executor usually doesn't just transform a string — it **shapes the user's raw input into a prompt** that the next executor (often an LLM agent) will consume. The `uppercase` step in this module is a deterministic stand-in for that "prompt builder" role.
+
+Edit the `uppercase` executor so that instead of returning `text.ToUpperInvariant()`, it returns a travel-friendly framing such as:
+
+```csharp
+return $"Destination: {text}";
+```
+
+Run the workflow and confirm that:
+
+1. The output you see in the console starts with `Destination:` (reversed, since `reverse` still runs after).
+2. The `ExecutorCompletedEvent` for `uppercase` shows your new string — proving the value flowing along the edge `uppercase → reverse` is whatever the first executor returned.
+
+The takeaway: each executor's return value **is** the input to the next one. In a real agent workflow you'd swap `reverse` for a `ChatClientAgent` and use this first step to build its prompt.
 
 ### 🟡 Intermediate — Add a new workflow step
 
