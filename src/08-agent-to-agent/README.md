@@ -89,45 +89,53 @@ Console.WriteLine($"Version:       {card.Version}");
 var weatherClient = new A2AHttpJsonClient(
     new Uri($"{baseAddress}{weatherAgentPath}"), http);
 
-var response = await weatherClient.SendMessageAsync(
-    "What is the weather like in Amsterdam this time of year?",
-    Role.User,
-    contextId);
+var prompt = "What is the weather like in Amsterdam this time of year?";
+Console.WriteLine($"> {prompt}");
+Console.WriteLine($"Agent: {await SendAndExtractText(weatherClient, prompt, contextId)}");
 ```
 
 - `A2AHttpJsonClient` is the typed client for the A2A HTTP+JSON binding
-- `SendMessageAsync` wraps the protocol envelope (`kind`, `role`, `parts`, `messageId`) for you
-- `Role.User` identifies the sender; the response will carry `Role.Agent`
+- `SendAndExtractText` is a small local helper (defined at the bottom of the file) that hides the request/response plumbing so the main flow stays readable
 - `contextId` ties multiple requests into one conversation — reuse it for follow-ups
 
-### Extract the reply
+### Inside the helper: send + extract the reply
 
 ```csharp
-var message = response.Message
-    ?? response.Task?.Status?.Message
-    ?? response.Task?.History?.LastOrDefault();
+static async Task<string> SendAndExtractText(IA2AClient client, string text, string contextId)
+{
+    var response = await client.SendMessageAsync(text, Role.User, contextId);
 
-var text = string.Concat(message?.Parts?.Select(p => p.Text) ?? []);
+    var message = response.Message
+        ?? response.Task?.Status?.Message
+        ?? response.Task?.History?.LastOrDefault();
+
+    if (message?.Parts is null)
+    {
+        return "(no response)";
+    }
+
+    return string.Concat(message.Parts.Select(p => p.Text)).Trim();
+}
 ```
 
-- A `SendMessageResponse` may carry either a direct `Message` (synchronous reply) or
-  a `Task` (long-running work with status and history) — we handle both
+- `SendMessageAsync(text, Role.User, contextId)` is the convenience overload that wraps the protocol envelope (`kind`, `role`, `parts`, `messageId`) for you
+- `Role.User` identifies the sender; the response will carry `Role.Agent`
+- A `SendMessageResponse` may carry either a direct `Message` (synchronous reply) or a `Task` (long-running work with status and history) — we handle both
 - `Message.Parts` is a list of content parts; `.Text` returns the text payload (empty for non-text parts)
 
 ### Call another endpoint the same way
 
 ```csharp
 var tripPlanningClient = new A2AHttpJsonClient(
-    new Uri($"{baseAddress}/a2a/trip-planning"), http);
+    new Uri($"{baseAddress}{tripPlanningPath}"), http);
 
-var response = await tripPlanningClient.SendMessageAsync(
-    "Help me plan a 3-day trip to Amsterdam in October.",
-    Role.User,
-    "trip-planning-demo-1");
+var prompt3 = "Help me plan a 3-day trip to Amsterdam in October.";
+Console.WriteLine($"> {prompt3}");
+Console.WriteLine($"Agent: {await SendAndExtractText(tripPlanningClient, prompt3, "trip-planning-demo-1")}");
 ```
 
 - The trip-planning endpoint is a **sequential workflow** behind the scenes (weather → travel)
-- From the client perspective, it still looks like one A2A agent
+- From the client perspective, it still looks like one A2A agent — same `A2AHttpJsonClient`, same `SendAndExtractText` helper
 - This is the key benefit: implementation details stay behind the protocol boundary
 
 ---
