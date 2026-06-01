@@ -11,35 +11,31 @@ using A2A;
 
 const string baseAddress = "http://localhost:5000";
 const string weatherAgentPath = "/a2a/weather";
-const string travelAgentPath = "/a2a/travel";
 const string tripPlanningPath = "/a2a/trip-planning";
+const string contextId = "a2a-demo-conversation-1"; // reuse this to maintain conversation history
 
 using var http = new HttpClient();
 
-// --- Step 1: Discover available agents via their AgentCards ---
-// A2ACardResolver fetches each agent's AgentCard — A2A's discovery document.
-// The card metadata lets the client route requests without hardcoding prompt → endpoint.
-Console.WriteLine("=== Step 1: Discover available agents ===");
-List<DiscoveredAgent> agents;
+// --- Step 1: Discover the agent via its AgentCard ---
+// A2ACardResolver fetches the agent's AgentCard — A2A's discovery document.
+// The card advertises the agent's identity, capabilities, and skills so any
+// A2A-compliant client can decide whether to call it.
+Console.WriteLine("=== Step 1: Discover the Weather Agent ===");
+AgentCard card;
 try
 {
     // The default card path is "/.well-known/agent-card.json" but Microsoft's
     // hosting library exposes it at "{agentPath}/card". A2ACardResolver combines
     // baseUrl + agentCardPath using URI rules — a leading "/" replaces the path —
     // so we pass the host as baseUrl and the full path as agentCardPath.
-    agents = await DiscoverAgentsAsync(
-        new Uri(baseAddress),
-        http,
-        [weatherAgentPath, travelAgentPath, tripPlanningPath]);
-
-    foreach (var agent in agents)
-    {
-        Console.WriteLine($"Agent name:    {agent.Card.Name}");
-        Console.WriteLine($"Description:   {agent.Card.Description}");
-        Console.WriteLine($"Version:       {agent.Card.Version}");
-        Console.WriteLine($"Endpoint:      {agent.BaseUrl}");
-        Console.WriteLine();
-    }
+    var resolver = new A2ACardResolver(
+        baseUrl: new Uri(baseAddress),
+        httpClient: http,
+        agentCardPath: $"{weatherAgentPath}/card");
+    card = await resolver.GetAgentCardAsync();
+    Console.WriteLine($"Agent name:    {card.Name}");
+    Console.WriteLine($"Description:   {card.Description}");
+    Console.WriteLine($"Version:       {card.Version}");
 }
 catch (HttpRequestException)
 {
@@ -50,28 +46,33 @@ catch (HttpRequestException)
     return;
 }
 
-// --- Step 2: Route a user prompt using card metadata ---
-// The heuristic is intentionally simple: count prompt keyword matches against
-// each card's name and description, then pick the highest-scoring agent.
-Console.WriteLine("=== Step 2: Enter a prompt ===");
-Console.Write("> ");
-var prompt = Console.ReadLine()?.Trim();
+// --- Step 2: Send a message to the agent ---
+// A2AHttpJsonClient is the typed client for the A2A HTTP+JSON binding.
+// The SendMessageAsync extension wraps the protocol envelope for plain text messages.
+// contextId ties messages to a conversation — reuse it to maintain history.
+var weatherClient = new A2AHttpJsonClient(new Uri($"{baseAddress}{weatherAgentPath}"), http);
 
-if (string.IsNullOrWhiteSpace(prompt))
-{
-    Console.WriteLine("No prompt provided.");
-    return;
-}
+Console.WriteLine("\n=== Step 2: Send a message to the Weather Agent ===");
+var prompt = "What is the weather like in Amsterdam this time of year?";
+Console.WriteLine($"> {prompt}");
+Console.WriteLine($"Agent: {await SendAndExtractText(weatherClient, prompt, contextId)}");
 
-var selectedAgent = SelectBestAgent(agents, prompt);
-var contextId = $"a2a-discovery-{Guid.NewGuid():N}";
+// --- Step 3: Follow-up in the same conversation ---
+// By reusing the same contextId, the agent remembers the previous exchange.
+Console.WriteLine("\n=== Step 3: Follow-up (same contextId = same conversation) ===");
+var prompt2 = "What should I pack for the weather there?";
+Console.WriteLine($"> {prompt2}");
+Console.WriteLine($"Agent: {await SendAndExtractText(weatherClient, prompt2, contextId)}");
 
-Console.WriteLine("\n=== Step 3: Route and send ===");
-Console.WriteLine($"Chosen agent:  {selectedAgent.Card.Name}");
-Console.WriteLine($"Why:           matched keywords in '{selectedAgent.Card.Name} - {selectedAgent.Card.Description}'");
+// --- Step 4: Call the workflow endpoint ---
+// Module 10 exposes a sequential workflow: weather agent → travel agent.
+// From the client's perspective it looks exactly like a single A2A agent.
+var tripPlanningClient = new A2AHttpJsonClient(new Uri($"{baseAddress}{tripPlanningPath}"), http);
 
-var client = new A2AHttpJsonClient(selectedAgent.BaseUrl, http);
-Console.WriteLine($"Agent: {await SendAndExtractText(client, prompt, contextId)}");
+Console.WriteLine("\n=== Step 4: Call the sequential workflow (weather → travel) ===");
+var prompt3 = "Help me plan a 3-day trip to Amsterdam in October.";
+Console.WriteLine($"> {prompt3}");
+Console.WriteLine($"Agent: {await SendAndExtractText(tripPlanningClient, prompt3, "trip-planning-demo-1")}");
 
 // Helper: sends a text message and extracts the response text.
 // SendMessageResponse can carry either a Message (direct reply) or a Task
@@ -91,80 +92,3 @@ static async Task<string> SendAndExtractText(IA2AClient client, string text, str
 
     return string.Concat(message.Parts.Select(p => p.Text)).Trim();
 }
-
-static async Task<string> SendAndExtractTextStreaming(IA2AClient client, string text, string contextId)
-{
-    var latest = "";
-
-    await foreach (var update in client.SendStreamingMessageAsync(text, Role.User, contextId))
-    {
-        var message = update.Message
-            ?? update.Task?.Status?.Message
-            ?? update.Task?.History?.LastOrDefault();
-
-        if (message?.Parts is not null)
-        {
-            var chunk = string.Concat(message.Parts.Select(p => p.Text));
-            Console.Write(chunk);
-            latest += chunk;
-        }
-    }
-
-    latest = latest.Trim();
-    return string.IsNullOrWhiteSpace(latest) ? "(no response)" : latest;
-}
-
-static async Task<List<DiscoveredAgent>> DiscoverAgentsAsync(Uri baseUri, HttpClient httpClient, IEnumerable<string> agentPaths)
-{
-    var discoveredAgents = new List<DiscoveredAgent>();
-
-    foreach (var agentPath in agentPaths)
-    {
-        var resolver = new A2ACardResolver(
-            baseUrl: baseUri,
-            httpClient: httpClient,
-            agentCardPath: $"{agentPath}/card");
-
-        var card = await resolver.GetAgentCardAsync();
-        discoveredAgents.Add(new DiscoveredAgent(card, new Uri(baseUri, agentPath.TrimStart('/'))));
-    }
-
-    return discoveredAgents;
-}
-
-static DiscoveredAgent SelectBestAgent(IEnumerable<DiscoveredAgent> agents, string prompt)
-{
-    var normalizedPrompt = prompt.Trim().ToLowerInvariant();
-
-    return agents
-        .Select(agent => new
-        {
-            Agent = agent,
-            Score = GetMatchScore(normalizedPrompt, agent.Card),
-        })
-        .OrderByDescending(result => result.Score)
-        .Select(result => result.Agent)
-        .First();
-}
-
-static int GetMatchScore(string prompt, AgentCard card)
-{
-    var nameMatches = ExtractKeywords(card.Name)
-        .Count(keyword => prompt.Contains(keyword, StringComparison.OrdinalIgnoreCase));
-
-    var descriptionMatches = ExtractKeywords(card.Description)
-        .Count(keyword => prompt.Contains(keyword, StringComparison.OrdinalIgnoreCase));
-
-    return (nameMatches * 2) + descriptionMatches;
-}
-
-static HashSet<string> ExtractKeywords(string text)
-{
-    return text
-        .Split([' ', '-', ',', '.', ':', ';', '(', ')', '/'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-        .Where(token => token.Length >= 3)
-        .Select(token => token.ToLowerInvariant())
-        .ToHashSet(StringComparer.OrdinalIgnoreCase);
-}
-
-internal sealed record DiscoveredAgent(AgentCard Card, Uri BaseUrl);
