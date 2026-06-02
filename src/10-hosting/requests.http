@@ -7,13 +7,15 @@ GET {{baseAddress}}/a2a/weather/card
 # Each request needs a unique messageId — Message.MessageId is [JsonRequired].
 # {{$guid}} is a VS Code REST Client variable; replace with any unique string
 # if your HTTP client doesn't support it.
+# role MUST be "ROLE_USER" — the A2A Role enum serializes with the
+# [JsonStringEnumMemberName] prefix, so "user" alone produces 400 Bad Request.
 # contextId maintains conversation history — reuse the same ID for follow-up questions.
 POST {{baseAddress}}/a2a/weather/message:stream
 Content-Type: application/json
 
 {
   "message": {
-    "role": "user",
+    "role": "ROLE_USER",
     "parts": [
       { "text": "What is the weather like in Amsterdam this time of year?" }
     ],
@@ -28,7 +30,7 @@ Content-Type: application/json
 
 {
   "message": {
-    "role": "user",
+    "role": "ROLE_USER",
     "parts": [
       { "text": "What about in December — should I pack a heavy coat?" }
     ],
@@ -43,7 +45,7 @@ Content-Type: application/json
 
 {
   "message": {
-    "role": "user",
+    "role": "ROLE_USER",
     "parts": [
       { "text": "I want to visit Amsterdam for 3 days. What are the must-see sights?" }
     ],
@@ -58,7 +60,7 @@ Content-Type: application/json
 
 {
   "message": {
-    "role": "user",
+    "role": "ROLE_USER",
     "parts": [
       { "text": "Help me plan a trip to Amsterdam in October." }
     ],
