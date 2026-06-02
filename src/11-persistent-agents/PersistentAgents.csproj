@@ -12,9 +12,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Azure.AI.Projects" Version="2.0.0" />
-    <PackageReference Include="Azure.AI.Projects.Agents" Version="2.0.0" />
+    <PackageReference Include="Azure.AI.Projects" Version="*" />
+    <PackageReference Include="Azure.AI.Projects.Agents" Version="*" />
     <PackageReference Include="Azure.Identity" Version="*" />
-    <PackageReference Include="Microsoft.Agents.AI.Foundry" Version="1.0.0" />
+    <PackageReference Include="Microsoft.Agents.AI.Foundry" Version="*" />
   </ItemGroup>
 </Project>
