@@ -112,14 +112,14 @@ Responses API.
 > in the `model` field of the `requests.http` payloads. If you rename the
 > agent, change all three.
 
-> **Note on isolation keys.** Foundry also injects `x-agent-user-isolation-key`
-> and `x-agent-chat-isolation-key` headers on every request so the hosting
-> layer can scope sessions per user/conversation. Without those headers the
-> default provider returns null and every request 500s. `Program.cs` registers
-> a small `LocalDevIsolationKeyProvider` that supplies stable fallback keys
-> (`local-dev-user` / `local-dev-chat`) when headers are missing and passes
-> real Foundry-supplied values through untouched when they're present — so
-> the same code works locally and in production.
+> **Note on isolation keys.** Foundry's hosting layer scopes sessions by two
+> required headers: `x-agent-user-isolation-key` and `x-agent-chat-isolation-key`.
+> In production Foundry injects them per user/conversation; locally you pick
+> any stable strings. **Without these headers every request 500s** with
+> `HostedSessionIsolationKeyProvider returned null` in the server console.
+> `requests.http` already sets them via `@userKey` / `@chatKey` variables —
+> change `@chatKey` to start a fresh conversation. If you `curl` directly,
+> add `-H "x-agent-user-isolation-key: local-dev-user" -H "x-agent-chat-isolation-key: local-dev-chat"`.
 
 ---
 

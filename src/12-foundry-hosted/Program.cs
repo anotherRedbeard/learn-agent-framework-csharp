@@ -1,5 +1,3 @@
-using Azure.AI.AgentServer.Responses;
-using Azure.AI.AgentServer.Responses.Models;
 using Azure.AI.Projects;
 using Azure.Identity;
 using Microsoft.Agents.AI;
@@ -37,30 +35,14 @@ AIAgent agent = new AIProjectClient(new Uri(endpoint), new DefaultAzureCredentia
 // AddFoundryResponses + MapFoundryResponses replace AddAIAgent + MapHttpA2A
 // from Module 10. They wire up the Responses-protocol endpoint Foundry calls
 // when it routes traffic to this container.
+//
+// Foundry injects x-agent-user-isolation-key and x-agent-chat-isolation-key
+// headers on every request so the hosting layer can scope sessions per
+// user/conversation. The default provider reads them straight off the request
+// and fails closed (HTTP 500) if they're missing — see requests.http for the
+// local-dev header values you need to send.
 builder.Services.AddFoundryResponses(agent);
-
-// Foundry normally injects x-agent-user-isolation-key and x-agent-chat-isolation-key
-// headers on every request so the hosting layer can scope sessions per user/conversation.
-// Without those headers the default provider returns null and every request 500s.
-// LocalDevIsolationKeyProvider supplies fallback keys when the headers are missing
-// (local dev) and passes real values through untouched when they're present (in Foundry),
-// so it's safe to register unconditionally.
-builder.Services.AddSingleton<HostedSessionIsolationKeyProvider, LocalDevIsolationKeyProvider>();
 
 var app = builder.Build();
 app.MapFoundryResponses();
 app.Run();
-
-internal sealed class LocalDevIsolationKeyProvider : HostedSessionIsolationKeyProvider
-{
-    public override ValueTask<HostedSessionContext?> GetKeysAsync(
-        ResponseContext context, CreateResponse request, CancellationToken cancellationToken)
-    {
-        var userKey = NonEmpty(context?.Isolation?.UserIsolationKey) ?? "local-dev-user";
-        var chatKey = NonEmpty(context?.Isolation?.ChatIsolationKey) ?? "local-dev-chat";
-        return new ValueTask<HostedSessionContext?>(new HostedSessionContext(userKey, chatKey));
-    }
-
-    private static string? NonEmpty(string? value) =>
-        string.IsNullOrWhiteSpace(value) ? null : value;
-}

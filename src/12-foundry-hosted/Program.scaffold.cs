@@ -10,7 +10,6 @@
 using Azure.AI.Projects;
 using Azure.Identity;
 using Microsoft.Agents.AI;
-using Microsoft.Agents.AI.Foundry.Hosting;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -37,9 +36,7 @@ AIAgent agent = throw new NotImplementedException("TODO 3");
 //         var app = builder.Build();
 //         app.MapFoundryResponses();
 //         app.Run();
-
-// TODO 6: Foundry injects x-agent-user-isolation-key and x-agent-chat-isolation-key
-//         headers — without them the default provider returns null and every request
-//         500s. Subclass HostedSessionIsolationKeyProvider to return stable fallback
-//         keys when context.Isolation.UserIsolationKey/ChatIsolationKey is empty, and
-//         register it in DI. (Safe in production too: real headers flow through.)
+//
+// Note: every request must include x-agent-user-isolation-key and
+//       x-agent-chat-isolation-key headers. Foundry injects them in production;
+//       see requests.http for the local-dev values to send when testing.

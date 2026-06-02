@@ -6,9 +6,18 @@
 @host = http://localhost:8088
 @agent = trip-planner
 
+# Foundry's hosting layer scopes sessions by these two headers. In production
+# Foundry sets them per user/conversation; locally you pick any stable strings.
+# Without them the server returns HTTP 500 (isolation key provider returns null).
+# Change @chatKey when you want to start a fresh conversation.
+@userKey = local-dev-user
+@chatKey = local-dev-chat
+
 ### 1. Simple non-streaming request
 POST {{host}}/responses
 Content-Type: application/json
+x-agent-user-isolation-key: {{userKey}}
+x-agent-chat-isolation-key: {{chatKey}}
 
 {
   "input": "Plan a 3-day trip to Tokyo in cherry blossom season.",
@@ -21,6 +30,8 @@ Content-Type: application/json
 # it's not hung. Use `curl --no-buffer` from a terminal to watch tokens arrive.
 POST {{host}}/responses
 Content-Type: application/json
+x-agent-user-isolation-key: {{userKey}}
+x-agent-chat-isolation-key: {{chatKey}}
 
 {
   "input": "Suggest a one-day food crawl in Lisbon.",
@@ -34,6 +45,8 @@ Content-Type: application/json
 # Module 10's `contextId`).
 POST {{host}}/responses
 Content-Type: application/json
+x-agent-user-isolation-key: {{userKey}}
+x-agent-chat-isolation-key: {{chatKey}}
 
 {
   "input": "What about vegetarian options on that crawl?",
