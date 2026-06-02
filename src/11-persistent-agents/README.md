@@ -1,39 +1,46 @@
-# Module 11 — Persistent Agents
+# Module 11 — Persistent Agents (Foundry Agents v2)
 
-**Concept:** Create an agent as a **server-side resource** in Foundry using the Azure AI Agents Service, instead of as a client-side .NET object.
+**Concept:** Create an agent as a **server-side resource** in Foundry using the
+new **Agents v2** API, so it shows up in the new [ai.azure.com](https://ai.azure.com)
+portal under your project's **Agents** tab — not the legacy *Assistants* surface.
+
+> ℹ️ The earlier `Azure.AI.Agents.Persistent` SDK targets the older **Assistants**
+> API. New Foundry projects flag those resources as legacy and ask you to migrate.
+> This module uses `Azure.AI.Projects` + `Azure.AI.Projects.Agents` (v2 GA), which
+> create **Prompt Agents** in the new experience.
 
 ## What you'll learn
 
-- The difference between **client-side agents** (`AIProjectClient.AsAIAgent`) and **persistent agents** (`PersistentAgentsClient`)
-- How to create a persistent agent, thread, message, and run
-- How to poll a run until it reaches a terminal state
-- How to read messages back from a thread
-- How persistent agents appear in the Foundry portal
+- The difference between **client-side agents** (Modules 01–10) and **persistent
+  Foundry agents** (this module)
+- How to create a Prompt Agent + version with `AIProjectClient.AgentAdministrationClient`
+- How to wrap a server-side agent in an `AIAgent` with `client.AsAIAgent(version)`
+- How **server-side sessions** preserve conversation history across turns
 
 ## When to use this pattern
 
-Use the Azure AI Agents Service when:
+Use Foundry Agents v2 when:
 - The agent must be **visible and editable** in the Foundry portal
 - Multiple apps, languages, or users need to share the **same agent definition**
-- You want Foundry-managed **threads, runs, and conversation history** (no local state)
-- You need Foundry's **built-in tools** — file search, code interpreter, browser automation
+- You want Foundry-managed **versions and conversation history** (no local state)
+- You need Foundry's **built-in tools** — file search, code interpreter, etc.
 
 Stick with the **client-side `AIAgent`** (modules 01–10) when:
 - The agent's behavior is owned entirely by your code
 - You want lightweight, in-process execution with no server-side resources to manage
-- You're targeting non-Foundry model providers (OpenAI direct, Anthropic, local models, etc.)
+- You're targeting non-Foundry model providers (OpenAI direct, Anthropic, local models)
 
 ---
 
 ## Client-side vs persistent — at a glance
 
-| Aspect | `AIProjectClient.AsAIAgent` (Modules 01–10) | `PersistentAgentsClient` (this module) |
+| Aspect | Client-side `AIAgent` (Modules 01–10) | Foundry Agent v2 (this module) |
 |---|---|---|
 | Where it lives | In-memory in your .NET process | Server-side in Foundry |
 | Visible in `ai.azure.com` | ❌ No | ✅ Yes (Project → Agents) |
-| Conversation state | `AgentSession` (in-process) | `Thread` (server-side) |
+| Conversation state | `AgentSession` (in-process) | `AgentSession` (server-side) |
 | Multi-app sharing | Each app builds its own | One agent, many clients |
-| Built-in Foundry tools | ❌ No | ✅ File search, code interpreter, etc. |
+| Versioning | n/a | Foundry tracks every `CreateAgentVersion` |
 | Cost of creating | Free (just a .NET object) | Counts as a Foundry resource |
 
 ---
@@ -46,74 +53,90 @@ dotnet run
 ```
 
 You should see:
-1. Created agent ID and thread ID
-2. Run status: `Completed`
-3. The user prompt and the assistant reply printed back from the thread
-4. A note telling you the agent is now visible in the portal
+1. `Created agent 'TripBot-Persistent' (version N).`
+2. The first prompt and reply about Paris
+3. The follow-up about kids — note the answer references Paris without
+   you mentioning it again (the session is persistent)
+4. A pointer to find it in the portal
 
-Then go to **[ai.azure.com](https://ai.azure.com)** → your project → **Agents**. You should see `TripBot-Persistent` listed. Click it and you can see its instructions, model deployment, and even chat with it from the portal.
+Then go to **[ai.azure.com](https://ai.azure.com)** → your project → **Agents**.
+You should see `TripBot-Persistent` listed under the **modern** Agents tab
+(not "Assistants"). Click it and try the Playground.
 
 ---
 
 ## Step 2 — Code walkthrough
 
-### Create the agent
+### Create the project client
 
 ```csharp
-var client = new PersistentAgentsClient(endpoint, new DefaultAzureCredential());
-
-PersistentAgent agent = await client.Administration.CreateAgentAsync(
-    model: deploymentName,
-    name: "TripBot-Persistent",
-    instructions: "You are TripBot...");
+var client = new AIProjectClient(new Uri(endpoint), new DefaultAzureCredential());
 ```
 
-- The `endpoint` is the same project endpoint you've been using since Module 01
-- `CreateAgentAsync` writes a real resource to Foundry — you get back an `agent.Id` you can reuse forever
+- `AIProjectClient` is the v2 entry point. The exact same `endpoint` you've used
+  since Module 01 works here.
+- Authentication uses `DefaultAzureCredential` — `az login` covers local dev.
 
-### Create a thread and post a message
+### Build a Prompt Agent definition
 
 ```csharp
-PersistentAgentThread thread = await client.Threads.CreateThreadAsync();
-
-var prompt = "What are the top 3 things to do in Paris?";
-Console.WriteLine($"> {prompt}");
-await client.Messages.CreateMessageAsync(
-    threadId: thread.Id,
-    role: MessageRole.User,
-    content: prompt);
+var definition = (DeclarativeAgentDefinition)
+    ProjectsAgentDefinition.CreatePromptAgentDefinition(deploymentName);
+definition.Instructions = "You are TripBot, a friendly travel planning assistant. Keep answers brief.";
 ```
 
-- A **thread** is the server-side analog of `AgentSession` from Module 03 — it holds the conversation history.
-- You append messages to the thread, then ask the agent to process them via a run.
+- `ProjectsAgentDefinition` is abstract; `CreatePromptAgentDefinition` is the
+  factory for the "prompt-only" flavor (no workflow, no hosted code). The portal
+  calls this a **Prompt Agent**.
+- Set `Instructions` (system prompt), and optionally `Temperature`, `TopP`,
+  `Tools`, etc.
 
-### Run the agent and poll
+### Create the agent version
 
 ```csharp
-ThreadRun run = await client.Runs.CreateRunAsync(thread.Id, agent.Id);
-while (run.Status == RunStatus.Queued || run.Status == RunStatus.InProgress)
+var options = new ProjectsAgentVersionCreationOptions(definition)
 {
-    await Task.Delay(TimeSpan.FromMilliseconds(500));
-    run = await client.Runs.GetRunAsync(thread.Id, run.Id);
+    Description = "Friendly travel planning assistant",
+};
+
+AgentAdministrationClient adminClient = client.AgentAdministrationClient;
+ProjectsAgentVersion version = await adminClient.CreateAgentVersionAsync(agentName, options);
+```
+
+- `client.AgentAdministrationClient` is a **property** (cached sub-client), not a method.
+- Each call to `CreateAgentVersionAsync` produces a new version under the same
+  agent name. Foundry shows the version history in the portal.
+
+### Wrap it in the Agent Framework
+
+```csharp
+AIAgent agent = client.AsAIAgent(version);
+```
+
+- `AsAIAgent` lives in `Microsoft.Agents.AI.Foundry`. It returns a `FoundryAgent`
+  (an `AIAgent`) that talks to the server-side resource you just created.
+- From here it's the **same `AIAgent` surface** you've been using since Module
+  01 — `RunAsync`, `CreateSessionAsync`, streaming overloads, etc.
+
+### Have a multi-turn conversation
+
+```csharp
+AgentSession session = await agent.CreateSessionAsync();
+foreach (var prompt in new[]
+{
+    "What are the top 3 things to do in Paris?",
+    "How would you change those for a family with young kids?",
+})
+{
+    var response = await agent.RunAsync(prompt, session);
+    Console.WriteLine(response.Text);
 }
 ```
 
-- A **run** is one invocation of an agent against a thread. It's asynchronous on the server side.
-- Terminal statuses: `Completed`, `Failed`, `Cancelled`, `Expired`, `RequiresAction` (tool call needed).
-
-### Read the response
-
-```csharp
-await foreach (var message in client.Messages.GetMessagesAsync(thread.Id, order: ListSortOrder.Ascending))
-{
-    foreach (var item in message.ContentItems)
-        if (item is MessageTextContent text)
-            Console.WriteLine($"[{message.Role}] {text.Text}");
-}
-```
-
-- Messages are paged and include both your prompts and the assistant's replies.
-- `MessageTextContent` is the common case; persistent agents can also return image, file, and tool-call content items.
+- `CreateSessionAsync` on a Foundry-backed agent creates a **server-side session**.
+- Compare with Module 03: there, the session was an in-memory list of `ChatMessage`.
+  Here it's a Foundry resource — the second prompt sees the first answer without
+  you re-sending the history.
 
 ---
 
@@ -121,39 +144,48 @@ await foreach (var message in client.Messages.GetMessagesAsync(thread.Id, order:
 
 ### 🟢 Starter — View the agent in the portal
 
-After running, open **[ai.azure.com](https://ai.azure.com)** → your project → **Agents**. Find `TripBot-Persistent`. Click it, try the **Playground** tab, and chat with the agent directly from the portal. This is the key difference from Module 01.
+After running, open **[ai.azure.com](https://ai.azure.com)** → your project →
+**Agents**. Find `TripBot-Persistent`. Click it, try the **Playground** tab, and
+chat with the agent directly from the portal. Confirm it appears under the
+**modern Agents** experience (not "Assistants" / "previously created assistants").
+This is the payoff for the SDK switch.
 
-### 🟡 Intermediate — Reuse the same agent across runs
+### 🟡 Intermediate — Reuse the agent on subsequent runs
 
-Right now the program creates a new agent every time. Modify it to:
+Right now each `dotnet run` creates a new version. Modify the program to:
 
-1. List existing agents with `client.Administration.GetAgentsAsync()`
-2. If `TripBot-Persistent` already exists, reuse it instead of creating a new one
-3. Otherwise create it
+1. Try `adminClient.GetAgentAsync(agentName)` first
+2. If it throws / returns 404, fall through to `CreateAgentVersionAsync`
+3. Otherwise call `adminClient.GetAgentVersionAsync(agentName, latestVersion)` and
+   reuse it
 
-> **Hint:** Real apps look up the agent by name (or store the ID in config) so they don't proliferate duplicates in the project.
+> **Hint:** Real apps look up agents by name (or store the ID in config) so they
+> don't churn versions on every restart.
 
-### 🔴 Stretch — Multi-turn conversation on the same thread
+### 🔴 Stretch — Stream a long answer
 
-Wrap the message + run + read loop in a `while(true)` that:
+Switch from `RunAsync` to the streaming overload:
 
-1. Reads a question from the console
-2. Posts it to the **same thread** (not a new one)
-3. Creates a new run and polls
-4. Prints only the latest assistant message
+```csharp
+await foreach (var update in agent.RunStreamingAsync("Plan me a 5-day Paris itinerary.", session))
+{
+    Console.Write(update.Text);
+}
+```
 
-The thread retains the full history server-side — no `AgentSession` needed.
+Notice how tokens arrive incrementally — the Foundry server side is streaming
+SSE just like Modules 02 and 10. The same `AIAgent` abstraction works for
+in-process and server-side agents.
 
 ---
 
 ## Step 4 — Build it from scratch (optional)
 
-Want to prove you understand it? Delete `Program.cs` contents and rebuild from `Program.scaffold.cs`:
+Want to prove you understand it? Replace `Program.cs` with the scaffold:
 
 ```bash
-# In src/11-persistent-agents/
 cp Program.scaffold.cs Program.cs   # overwrites the solution with the scaffold
-dotnet run                           # will fail — that's expected, fill in the TODOs
+dotnet run                          # will fail — that's expected, fill in the TODOs
 ```
 
 ---
@@ -169,28 +201,25 @@ DELETE_AGENT=true dotnet run
 
 **Option B — from the portal:** Project → Agents → select agent → Delete.
 
-**Option C — via CLI:**
-```bash
-# List agents (REST via az)
-az rest --method get --uri "<your-project-endpoint>/agents?api-version=v1"
-```
-
 ---
 
 ## Anti-patterns to avoid
 
-❌ **Creating a new persistent agent on every app startup** — you'll fill the project with duplicates. Look up by name or store the ID.
+❌ **Creating a new agent / version on every app startup** — you'll fill the
+project with duplicate versions. Look up by name first.
 
-❌ **Forgetting to clean up threads** — threads are cheap but accumulate. Delete completed conversation threads or use them as long-lived sessions deliberately.
+❌ **Reaching for `Azure.AI.Agents.Persistent`** — that's the *legacy* Assistants
+API. New projects show those as "Assistants are not yet supported" in the new
+portal experience.
 
-❌ **Polling without a delay** — `Task.Delay` between `GetRunAsync` calls is required. Tight loops will rate-limit you.
-
-❌ **Mixing client-side and persistent agents in the same project unintentionally** — pick one model per use case. They don't share state.
+❌ **Mixing client-side and persistent agents in the same use case** —
+they don't share state. Pick one per scenario.
 
 ## References
 
-- [Azure AI Agents Service overview](https://learn.microsoft.com/azure/ai-services/agents/overview)
-- [Azure.AI.Agents.Persistent NuGet](https://www.nuget.org/packages/Azure.AI.Agents.Persistent)
+- [Microsoft Foundry Agents overview](https://learn.microsoft.com/azure/foundry/agents/overview)
+- [Azure.AI.Projects.Agents NuGet](https://www.nuget.org/packages/Azure.AI.Projects.Agents)
+- [Microsoft.Agents.AI.Foundry NuGet](https://www.nuget.org/packages/Microsoft.Agents.AI.Foundry)
 - [Foundry portal](https://ai.azure.com)
 
 ---

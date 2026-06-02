@@ -1,5 +1,5 @@
 // ============================================================
-// Module 11 Scaffold — Persistent Agents
+// Module 11 Scaffold — Persistent Agents (Foundry Agents v2)
 // ============================================================
 // Use this file to build Module 11 from scratch.
 // Copy it over Program.cs, then fill in every TODO.
@@ -10,8 +10,10 @@
 // ============================================================
 
 // TODO: Add using statements for:
-//   - Azure.AI.Agents.Persistent
+//   - Azure.AI.Projects
+//   - Azure.AI.Projects.Agents
 //   - Azure.Identity
+//   - Microsoft.Agents.AI
 
 
 
@@ -23,46 +25,50 @@ var endpoint = "";
 //       Fall back to "gpt-4o-mini" if it's not set.
 var deploymentName = "";
 
-// TODO: Create a PersistentAgentsClient.
-//       - Connect to the endpoint
+const string agentName = "TripBot-Persistent";
+
+// TODO: Create an AIProjectClient.
+//       - Point at the endpoint URI
 //       - Authenticate with DefaultAzureCredential
-var client = null!;
+//       This is the v2 Foundry client. Agents created via this client show up
+//       in the *new* https://ai.azure.com portal under Agents.
+AIProjectClient client = null!;
 
-// TODO: Create a persistent agent as a server-side Foundry resource.
-//       - Use client.Administration.CreateAgentAsync()
-//       - Use deploymentName as the model
-//       - Name it "TripBot-Persistent"
-//       - Give it brief travel-planning instructions
-PersistentAgent agent = null!;
-Console.WriteLine($"Created agent: {agent.Id} ({agent.Name})");
+// TODO: Build a Prompt Agent definition.
+//       - Call ProjectsAgentDefinition.CreatePromptAgentDefinition(deploymentName)
+//         and cast to DeclarativeAgentDefinition
+//       - Set Instructions to a brief travel-planning system prompt
+DeclarativeAgentDefinition definition = null!;
 
-// TODO: Create a thread with client.Threads.CreateThreadAsync().
-//       This is the server-side conversation history.
-PersistentAgentThread thread = null!;
-Console.WriteLine($"Created thread: {thread.Id}");
+// TODO: Wrap the definition in a ProjectsAgentVersionCreationOptions.
+//       - Optionally set Description
+ProjectsAgentVersionCreationOptions options = null!;
 
-// TODO: Create a user message on the thread with client.Messages.CreateMessageAsync().
-//       Ask TripBot for the top 3 things to do in Paris.
+// TODO: Grab the admin sub-client (client.AgentAdministrationClient — it's a
+//       property, not a method) and create the agent version.
+//       - await adminClient.CreateAgentVersionAsync(agentName, options)
+AgentAdministrationClient adminClient = null!;
+ProjectsAgentVersion version = null!;
+Console.WriteLine($"Created agent '{agentName}' (version {version.Version}).");
+
+// TODO: Wrap the server-side agent in the Agent Framework's AIAgent abstraction
+//       with client.AsAIAgent(version). This is the same RunAsync /
+//       CreateSessionAsync surface used in every earlier module.
+AIAgent agent = null!;
+
+// TODO: Create a server-side session with agent.CreateSessionAsync().
+//       Unlike Module 03 (in-memory), this session lives in Foundry — the
+//       second turn will see the first answer without you re-sending it.
+AgentSession session = null!;
+
+// TODO: Send two prompts so you can prove the session is persistent:
+//   1. "What are the top 3 things to do in Paris?"
+//   2. "How would you change those for a family with young kids?"
+//      Print each response.Text.
 
 
-// TODO: Create a run with client.Runs.CreateRunAsync(thread.Id, agent.Id).
-//       Then poll with client.Runs.GetRunAsync() while the status is Queued or InProgress.
-//       Include a short Task.Delay between polls.
-ThreadRun run = null!;
+Console.WriteLine($"\nOpen https://ai.azure.com → your project → Agents to see '{agentName}'.");
+Console.WriteLine("Set DELETE_AGENT=true and re-run to clean up automatically.");
 
-Console.WriteLine($"Run completed with status: {run.Status}");
-
-// TODO: If the run did not complete, print run.LastError?.Message and return.
-
-
-// TODO: Retrieve messages with client.Messages.GetMessagesAsync().
-//       Use ListSortOrder.Ascending so the prompt appears before the reply.
-//       For each MessageTextContent item, print [$"{message.Role}"] and the text.
-Console.WriteLine("\n--- Conversation ---");
-
-Console.WriteLine($"\nAgent {agent.Id} is now visible in ai.azure.com under your project's Agents tab.");
-Console.WriteLine("Set DELETE_AGENT=true to delete it on next run, or delete from the portal.");
-
-// TODO: If DELETE_AGENT is set to true, delete the thread and agent.
-//       Use client.Threads.DeleteThreadAsync(thread.Id) and
-//       client.Administration.DeleteAgentAsync(agent.Id).
+// TODO: If the DELETE_AGENT env var is "true", call
+//       adminClient.DeleteAgentAsync(agentName).
