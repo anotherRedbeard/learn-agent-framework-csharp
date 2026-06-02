@@ -1,3 +1,5 @@
+using Azure.AI.AgentServer.Responses;
+using Azure.AI.AgentServer.Responses.Models;
 using Azure.AI.Projects;
 using Azure.Identity;
 using Microsoft.Agents.AI;
@@ -37,6 +39,31 @@ AIAgent agent = new AIProjectClient(new Uri(endpoint), new DefaultAzureCredentia
 // when it routes traffic to this container.
 builder.Services.AddFoundryResponses(agent);
 
+// Local-dev only: Foundry normally injects x-agent-user-isolation-key and
+// x-agent-chat-isolation-key headers on every request so the hosting layer
+// can scope sessions per user/conversation. Without those headers the default
+// provider returns null and the request 500s. This fallback supplies stable
+// dev keys so dotnet run / docker run work out of the box. In production the
+// platform-supplied values flow through context.Isolation untouched.
+if (builder.Environment.IsDevelopment())
+{
+    builder.Services.AddSingleton<HostedSessionIsolationKeyProvider, LocalDevIsolationKeyProvider>();
+}
+
 var app = builder.Build();
 app.MapFoundryResponses();
 app.Run();
+
+internal sealed class LocalDevIsolationKeyProvider : HostedSessionIsolationKeyProvider
+{
+    public override ValueTask<HostedSessionContext?> GetKeysAsync(
+        ResponseContext context, CreateResponse request, CancellationToken cancellationToken)
+    {
+        var userKey = NonEmpty(context?.Isolation?.UserIsolationKey) ?? "local-dev-user";
+        var chatKey = NonEmpty(context?.Isolation?.ChatIsolationKey) ?? "local-dev-chat";
+        return new ValueTask<HostedSessionContext?>(new HostedSessionContext(userKey, chatKey));
+    }
+
+    private static string? NonEmpty(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value;
+}

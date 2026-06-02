@@ -112,6 +112,16 @@ Responses API.
 > in the `model` field of the `requests.http` payloads. If you rename the
 > agent, change all three.
 
+> **Note on isolation keys.** Foundry also injects `x-agent-user-isolation-key`
+> and `x-agent-chat-isolation-key` headers on every request so the hosting
+> layer can scope sessions per user/conversation. Without those headers the
+> default provider returns null and every request 500s. `Program.cs` registers
+> a small `LocalDevIsolationKeyProvider` **only in Development** that supplies
+> stable fallback keys (`local-dev-user` / `local-dev-chat`) so `dotnet run`
+> works out of the box. The platform-supplied values are honored when they're
+> present, so the fallback is a no-op in production — but the gate keeps the
+> defaults from ever shipping in a deployed image.
+
 ---
 
 ## Step 3 — Run it as a container
