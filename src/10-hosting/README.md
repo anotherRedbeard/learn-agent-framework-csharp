@@ -43,6 +43,8 @@ dotnet run
 
 Open `requests.http` and send the AgentCard and message requests. You should see hosted endpoints for the weather agent, travel agent, and trip-planning workflow.
 
+> **Heads up — streaming responses look frozen in VS Code.** The `:stream` endpoints return Server-Sent Events, but the **VS Code REST Client extension buffers the entire response** before rendering. Calls that hit a real LLM can take 10–30 seconds, during which the UI shows no progress and no spinner — it's not hung, it's waiting for the stream to close. If you want to *see* tokens arrive live, switch to `curl --no-buffer` or call the `:stream` endpoint from the Module 08 client. To skip streaming entirely, change the URL to `:send` and you'll get a single JSON body when the call completes.
+
 ---
 
 ## Step 2 — Code walkthrough
