@@ -1,0 +1,13 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/microsoft/AgentSchema/refs/heads/main/schemas/v1.0/ContainerAgent.yaml
+#
+# Foundry container-agent manifest. `azd ai agent deploy` reads this file to
+# register the hosted agent with your Foundry project and to size the container.
+# The `name` here MUST match AGENT_NAME inside the running container.
+kind: hosted
+name: trip-planner
+protocols:
+  - protocol: responses
+    version: 1.0.0
+resources:
+  cpu: "0.25"
+  memory: 0.5Gi

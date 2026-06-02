@@ -45,7 +45,8 @@ Follow these in order if you're new to Agent Framework. Jump to any module if yo
 | [08 — Agent-to-Agent (A2A)](src/08-agent-to-agent/) | Inter-agent communication across service boundaries | `MapA2A`, A2A protocol |
 | [09 — Workflows](src/09-workflows/) | Explicit multi-step orchestration | `WorkflowBuilder`, `Executor<T>` |
 | [10 — Hosting](src/10-hosting/) | Expose agents via ASP.NET Core + A2A | `AddAIAgent`, `AddWorkflow`, DI hosting |
-| [11 — Persistent Agents](src/11-persistent-agents/) | Create server-side agents in Foundry (visible in `ai.azure.com`) | `PersistentAgentsClient`, threads, runs |
+| [11 — Persistent Agents](src/11-persistent-agents/) | Create server-side Prompt Agents in Foundry (visible in `ai.azure.com`) | `AIProjectClient`, `ProjectsAgentDefinition`, `AgentSession` |
+| [12 — Foundry-hosted Container](src/12-foundry-hosted/) | Lift the Module 10 travel agent into a Foundry-managed container | `AddFoundryResponses`, `MapFoundryResponses`, `agent.yaml`, `azd ai agent deploy` |
 
 ## Core Concepts
 
