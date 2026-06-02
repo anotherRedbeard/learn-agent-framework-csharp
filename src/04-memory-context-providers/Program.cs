@@ -1,4 +1,3 @@
-using Azure.AI.OpenAI;
 using Azure.AI.Projects;
 using Azure.Identity;
 using Microsoft.Agents.AI;
@@ -33,31 +32,43 @@ var prompt3 = "What do you know about my travel preferences so far?";
 Console.WriteLine($"> {prompt3}");
 Console.WriteLine(await agent.RunAsync(prompt3, session));  // Remembers preferences
 
-// --- Example 2: Custom ChatHistoryProvider ---
-// You can provide your own implementation to store history in a database,
-// Redis cache, or any other persistent store.
+// --- Example 2: Custom ChatHistoryProvider (API shape) ---
+// ChatHistoryProvider is the extension point for plugging in your own storage
+// backend — Redis, SQL, Cosmos, etc. This example shows the API shape so you
+// know how to wire one up.
 //
-// IMPORTANT: ChatHistoryProvider only takes effect when the underlying client
-// keeps conversation state on the *client* side. Foundry's Responses API
-// (AIProjectClient.AsAIAgent) tracks state server-side via previous_response_id
-// and bypasses your provider entirely. Chat Completions has no server-side
-// session, so the framework relies on the provider — which is what we want
-// here. We build this example on AzureOpenAIClient.GetChatClient(...) for
-// exactly that reason.
-Console.WriteLine("\n=== Example 2: Custom ChatHistoryProvider ===");
+// IMPORTANT — Foundry Responses caveat: ChatHistoryProvider is architecturally
+// bypassed when the underlying service tracks conversation state server-side.
+// AIProjectClient.AsAIAgent uses Foundry's Responses API, which keeps history
+// on the server via previous_response_id. The framework silently routes around
+// your provider in that case. ThrowOnChatHistoryProviderConflict /
+// WarnOnChatHistoryProviderConflict only control whether you're *notified* —
+// they don't force your provider to take over.
+//
+// What you'll see when you run this:
+//   - The [History] Providing 0 stored messages line fires ONCE on the first
+//     call, then never again. StoreChatHistoryAsync never fires.
+//   - The agent still "remembers" the dietary preference because Foundry is
+//     tracking it server-side, not because our provider is doing its job.
+//
+// When does the provider actually run? When the agent talks to a service with
+// NO server-side history (e.g. raw Chat Completions via
+// AzureOpenAIClient.GetChatClient(...).AsIChatClient() + new ChatClientAgent).
+// That path needs a different RBAC role (Cognitive Services OpenAI User on the
+// account) and a different endpoint, so we stay on AIProjectClient here to
+// keep the prerequisites consistent across the course.
+Console.WriteLine("\n=== Example 2: Custom ChatHistoryProvider (API shape) ===");
 
-// Strip "/api/projects/..." off the AIProjectClient endpoint to get the bare
-// Azure OpenAI endpoint that AzureOpenAIClient expects.
-var openAiEndpoint = new Uri(endpoint.Split("/api/projects/", 2)[0]);
-IChatClient chatClient = new AzureOpenAIClient(openAiEndpoint, new DefaultAzureCredential())
-    .GetChatClient(deploymentName)
-    .AsIChatClient();
-
-AIAgent agentWithCustomHistory = new ChatClientAgent(chatClient, new ChatClientAgentOptions
-{
-    ChatOptions = new() { Instructions = "You are TripBot, a travel planning assistant." },
-    ChatHistoryProvider = new LoggingChatHistoryProvider()
-});
+AIAgent agentWithCustomHistory = new AIProjectClient(new Uri(endpoint), new DefaultAzureCredential())
+    .AsAIAgent(new ChatClientAgentOptions
+    {
+        ChatOptions = new() { ModelId = deploymentName, Instructions = "You are TripBot, a travel planning assistant." },
+        ChatHistoryProvider = new LoggingChatHistoryProvider(),
+        // Suppress the conflict warning — we know our provider is bypassed here
+        // and we're showing the API shape on purpose.
+        ThrowOnChatHistoryProviderConflict = false,
+        WarnOnChatHistoryProviderConflict = false
+    });
 
 AgentSession session2 = await agentWithCustomHistory.CreateSessionAsync();
 var prompt4 = "I need vegetarian meal options on my flights.";

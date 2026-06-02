@@ -12,7 +12,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Azure.AI.OpenAI" Version="*-*" />
     <PackageReference Include="Azure.AI.Projects" Version="*-*" />
     <PackageReference Include="Azure.Identity" Version="*" />
     <PackageReference Include="Microsoft.Agents.AI.Foundry" Version="*-*" />

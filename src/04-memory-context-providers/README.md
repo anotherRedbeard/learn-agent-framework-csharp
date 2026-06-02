@@ -88,28 +88,23 @@ Console.WriteLine(await agent.RunAsync(prompt3, session));
 - The third call works because the previous user messages are injected as conversation context
 - Without the session, each `RunAsync` would start from scratch
 
-### Provide custom history (storage)
+### Provide custom history (API shape)
 
 ```csharp
-// Use AzureOpenAIClient (Chat Completions) — not AIProjectClient (Responses).
-// Responses tracks state server-side via previous_response_id and bypasses
-// your ChatHistoryProvider; Chat Completions has no server state, so the
-// provider actually runs every turn.
-IChatClient chatClient = new AzureOpenAIClient(openAiEndpoint, new DefaultAzureCredential())
-    .GetChatClient(deploymentName)
-    .AsIChatClient();
-
-AIAgent agentWithCustomHistory = new ChatClientAgent(chatClient, new ChatClientAgentOptions
-{
-    ChatOptions = new() { Instructions = "You are TripBot..." },
-    ChatHistoryProvider = new LoggingChatHistoryProvider()
-});
+AIAgent agentWithCustomHistory = new AIProjectClient(new Uri(endpoint), new DefaultAzureCredential())
+    .AsAIAgent(new ChatClientAgentOptions
+    {
+        ChatOptions = new() { ModelId = deploymentName, Instructions = "You are TripBot..." },
+        ChatHistoryProvider = new LoggingChatHistoryProvider(),
+        ThrowOnChatHistoryProviderConflict = false,
+        WarnOnChatHistoryProviderConflict = false
+    });
 ```
 
 - `ChatClientAgentOptions` lets you replace the default history provider
-- `ChatHistoryProvider` is the extension point for storing the transcript in your own backend
+- `ChatHistoryProvider` is the extension point for storing the transcript in your own backend (Redis, SQL, Cosmos, etc.)
 - In production, key stored messages by session or user instead of using one shared list
-- ⚠️ `ChatHistoryProvider` is **silently ignored** when the agent runs against a service that manages history server-side (Foundry Responses, Assistants API). `ThrowOnChatHistoryProviderConflict` / `WarnOnChatHistoryProviderConflict` only control whether you're notified — they don't force your provider to take over. Use Chat Completions when you need your provider to actually run.
+- ⚠️ **Foundry Responses caveat:** when the underlying service tracks history server-side (Foundry Responses, OpenAI Assistants), the framework architecturally bypasses your `ChatHistoryProvider`. The `Throw/WarnOnChatHistoryProviderConflict` flags only control whether you're notified — they don't force your provider to take over. The `[History] Providing 0 stored messages` line will fire once on the first call and then never again; `StoreChatHistoryAsync` won't fire at all. The agent still "remembers" the conversation because Foundry tracks it server-side via `previous_response_id`, not because your provider is doing its job. To see your provider actually run, point the agent at a service with no server-side history (raw Chat Completions via `AzureOpenAIClient.GetChatClient(...).AsIChatClient()` + `new ChatClientAgent(...)`) — but that needs a different endpoint and the `Cognitive Services OpenAI User` role on the account.
 
 ### History provider hooks (store + provide)
 
