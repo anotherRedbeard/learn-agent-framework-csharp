@@ -1,3 +1,4 @@
+using Azure.AI.OpenAI;
 using Azure.AI.Projects;
 using Azure.Identity;
 using Microsoft.Agents.AI;
@@ -35,19 +36,28 @@ Console.WriteLine(await agent.RunAsync(prompt3, session));  // Remembers prefere
 // --- Example 2: Custom ChatHistoryProvider ---
 // You can provide your own implementation to store history in a database,
 // Redis cache, or any other persistent store.
+//
+// IMPORTANT: ChatHistoryProvider only takes effect when the underlying client
+// keeps conversation state on the *client* side. Foundry's Responses API
+// (AIProjectClient.AsAIAgent) tracks state server-side via previous_response_id
+// and bypasses your provider entirely. Chat Completions has no server-side
+// session, so the framework relies on the provider — which is what we want
+// here. We build this example on AzureOpenAIClient.GetChatClient(...) for
+// exactly that reason.
 Console.WriteLine("\n=== Example 2: Custom ChatHistoryProvider ===");
 
-AIAgent agentWithCustomHistory = new AIProjectClient(new Uri(endpoint), new DefaultAzureCredential())
-    .AsAIAgent(new ChatClientAgentOptions
-    {
-        ChatOptions = new() { ModelId = deploymentName, Instructions = "You are TripBot, a travel planning assistant." },
-        ChatHistoryProvider = new LoggingChatHistoryProvider(),
-        // Foundry's Responses API tracks conversation state server-side via previous_response_id.
-        // Setting these flags lets us use a custom ChatHistoryProvider anyway — the framework will
-        // silently clear the server-side conversation id and use our provider's history instead.
-        ThrowOnChatHistoryProviderConflict = false,
-        WarnOnChatHistoryProviderConflict = false
-    });
+// Strip "/api/projects/..." off the AIProjectClient endpoint to get the bare
+// Azure OpenAI endpoint that AzureOpenAIClient expects.
+var openAiEndpoint = new Uri(endpoint.Split("/api/projects/", 2)[0]);
+IChatClient chatClient = new AzureOpenAIClient(openAiEndpoint, new DefaultAzureCredential())
+    .GetChatClient(deploymentName)
+    .AsIChatClient();
+
+AIAgent agentWithCustomHistory = new ChatClientAgent(chatClient, new ChatClientAgentOptions
+{
+    ChatOptions = new() { Instructions = "You are TripBot, a travel planning assistant." },
+    ChatHistoryProvider = new LoggingChatHistoryProvider()
+});
 
 AgentSession session2 = await agentWithCustomHistory.CreateSessionAsync();
 var prompt4 = "I need vegetarian meal options on my flights.";

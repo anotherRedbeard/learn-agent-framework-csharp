@@ -46,7 +46,12 @@ AgentSession session = null!;
 
 // TODO: Print a blank line and the label "=== Example 2: Custom ChatHistoryProvider ===".
 
-// TODO: Create a second AIAgent using ChatClientAgentOptions.
+// TODO: Create a second AIAgent that uses the custom ChatHistoryProvider.
+//       IMPORTANT: ChatHistoryProvider is silently ignored against services that
+//       track conversation state server-side (like Foundry Responses). Build this
+//       agent on AzureOpenAIClient.GetChatClient(...).AsIChatClient() (Chat
+//       Completions) so the provider actually runs every turn.
+//       - new ChatClientAgent(chatClient, new ChatClientAgentOptions { ... })
 //       - Set ChatOptions.Instructions for TripBot
 //       - Set ChatHistoryProvider to a new LoggingChatHistoryProvider
 AIAgent agentWithCustomHistory = null!;

@@ -91,21 +91,25 @@ Console.WriteLine(await agent.RunAsync(prompt3, session));
 ### Provide custom history (storage)
 
 ```csharp
-AIAgent agentWithCustomHistory = new AIProjectClient(new Uri(endpoint), new DefaultAzureCredential())
-    .AsAIAgent(new ChatClientAgentOptions
-    {
-        ChatOptions = new() { ModelId = deploymentName, Instructions = "You are TripBot..." },
-        ChatHistoryProvider = new LoggingChatHistoryProvider(),
-        // Foundry's Responses API tracks conversation state server-side. These flags let
-        // your custom provider take over instead — no exception, no warning.
-        ThrowOnChatHistoryProviderConflict = false,
-        WarnOnChatHistoryProviderConflict = false
-    });
+// Use AzureOpenAIClient (Chat Completions) — not AIProjectClient (Responses).
+// Responses tracks state server-side via previous_response_id and bypasses
+// your ChatHistoryProvider; Chat Completions has no server state, so the
+// provider actually runs every turn.
+IChatClient chatClient = new AzureOpenAIClient(openAiEndpoint, new DefaultAzureCredential())
+    .GetChatClient(deploymentName)
+    .AsIChatClient();
+
+AIAgent agentWithCustomHistory = new ChatClientAgent(chatClient, new ChatClientAgentOptions
+{
+    ChatOptions = new() { Instructions = "You are TripBot..." },
+    ChatHistoryProvider = new LoggingChatHistoryProvider()
+});
 ```
 
 - `ChatClientAgentOptions` lets you replace the default history provider
 - `ChatHistoryProvider` is the extension point for storing the transcript in your own backend
 - In production, key stored messages by session or user instead of using one shared list
+- ⚠️ `ChatHistoryProvider` is **silently ignored** when the agent runs against a service that manages history server-side (Foundry Responses, Assistants API). `ThrowOnChatHistoryProviderConflict` / `WarnOnChatHistoryProviderConflict` only control whether you're notified — they don't force your provider to take over. Use Chat Completions when you need your provider to actually run.
 
 ### History provider hooks (store + provide)
 
