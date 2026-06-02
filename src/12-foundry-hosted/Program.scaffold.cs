@@ -18,7 +18,7 @@ var builder = WebApplication.CreateBuilder(args);
 //         Fall back to a stable local name like "trip-planner" so curl tests work.
 string agentName = throw new NotImplementedException("TODO 1");
 
-// TODO 2: Read AZURE_AI_PROJECT_ENDPOINT and AZURE_AI_MODEL_DEPLOYMENT_NAME from
+// TODO 2: Read AZURE_OPENAI_ENDPOINT and AZURE_OPENAI_DEPLOYMENT_NAME from
 //         builder.Configuration. Throw a clear InvalidOperationException if either
 //         is missing — the container has nothing to talk to without them.
 string endpoint = throw new NotImplementedException("TODO 2");

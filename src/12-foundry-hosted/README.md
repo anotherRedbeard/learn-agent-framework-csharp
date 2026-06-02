@@ -91,13 +91,14 @@ Three things to notice:
 
 ## Step 2 — Run it locally with `dotnet run`
 
-Set config (same Foundry project as Module 11):
+Set config (same env vars the rest of the repo uses — if you already exported
+them per [`docs/prerequisites.md`](../../docs/prerequisites.md), skip this):
 
 ```bash
 cd src/12-foundry-hosted
-dotnet user-secrets set "AZURE_AI_PROJECT_ENDPOINT" \
-  "https://<account>.services.ai.azure.com/api/projects/<project>"
-dotnet user-secrets set "AZURE_AI_MODEL_DEPLOYMENT_NAME" "gpt-4o-mini"
+dotnet user-secrets set "AZURE_OPENAI_ENDPOINT" \
+  "https://<account>.services.ai.azure.com"
+dotnet user-secrets set "AZURE_OPENAI_DEPLOYMENT_NAME" "gpt-4o-mini"
 dotnet run
 ```
 
@@ -151,8 +152,8 @@ Once the container runs cleanly locally, push it into Foundry:
 cd src/12-foundry-hosted
 
 # Point azd at your Foundry project (one-time per shell)
-azd env set AZURE_AI_PROJECT_ENDPOINT \
-  "https://<account>.services.ai.azure.com/api/projects/<project>"
+azd env set AZURE_OPENAI_ENDPOINT \
+  "https://<account>.services.ai.azure.com"
 
 # Build, push to a registry, register with Foundry
 azd ai agent deploy

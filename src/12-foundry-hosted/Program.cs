@@ -12,11 +12,11 @@ string agentName = Environment.GetEnvironmentVariable("AGENT_NAME")
     ?? builder.Configuration["AGENT_NAME"]
     ?? "trip-planner";
 
-string endpoint = builder.Configuration["AZURE_AI_PROJECT_ENDPOINT"]
+string endpoint = builder.Configuration["AZURE_OPENAI_ENDPOINT"]
     ?? throw new InvalidOperationException(
-        "AZURE_AI_PROJECT_ENDPOINT is not set. Use dotnet user-secrets or environment variables.");
-string deployment = builder.Configuration["AZURE_AI_MODEL_DEPLOYMENT_NAME"]
-    ?? throw new InvalidOperationException("AZURE_AI_MODEL_DEPLOYMENT_NAME is not set.");
+        "AZURE_OPENAI_ENDPOINT is not set. Use dotnet user-secrets or environment variables.");
+string deployment = builder.Configuration["AZURE_OPENAI_DEPLOYMENT_NAME"]
+    ?? throw new InvalidOperationException("AZURE_OPENAI_DEPLOYMENT_NAME is not set.");
 
 // Same agent persona as Module 10's "travel" agent — only the *hosting model*
 // changes. Module 10 ran behind A2A on your machine; here, the same agent runs
