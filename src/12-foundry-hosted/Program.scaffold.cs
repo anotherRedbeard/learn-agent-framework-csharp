@@ -38,9 +38,8 @@ AIAgent agent = throw new NotImplementedException("TODO 3");
 //         app.MapFoundryResponses();
 //         app.Run();
 
-// TODO 6 (local dev only): Foundry normally injects x-agent-user-isolation-key
-//         and x-agent-chat-isolation-key headers — without them the default
-//         provider returns null and every request 500s. Subclass
-//         HostedSessionIsolationKeyProvider to return stable fallback keys
-//         when context.Isolation.UserIsolationKey/ChatIsolationKey is empty,
-//         and register it in DI ONLY when builder.Environment.IsDevelopment().
+// TODO 6: Foundry injects x-agent-user-isolation-key and x-agent-chat-isolation-key
+//         headers — without them the default provider returns null and every request
+//         500s. Subclass HostedSessionIsolationKeyProvider to return stable fallback
+//         keys when context.Isolation.UserIsolationKey/ChatIsolationKey is empty, and
+//         register it in DI. (Safe in production too: real headers flow through.)

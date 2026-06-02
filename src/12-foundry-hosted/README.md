@@ -116,11 +116,10 @@ Responses API.
 > and `x-agent-chat-isolation-key` headers on every request so the hosting
 > layer can scope sessions per user/conversation. Without those headers the
 > default provider returns null and every request 500s. `Program.cs` registers
-> a small `LocalDevIsolationKeyProvider` **only in Development** that supplies
-> stable fallback keys (`local-dev-user` / `local-dev-chat`) so `dotnet run`
-> works out of the box. The platform-supplied values are honored when they're
-> present, so the fallback is a no-op in production — but the gate keeps the
-> defaults from ever shipping in a deployed image.
+> a small `LocalDevIsolationKeyProvider` that supplies stable fallback keys
+> (`local-dev-user` / `local-dev-chat`) when headers are missing and passes
+> real Foundry-supplied values through untouched when they're present — so
+> the same code works locally and in production.
 
 ---
 

@@ -39,16 +39,13 @@ AIAgent agent = new AIProjectClient(new Uri(endpoint), new DefaultAzureCredentia
 // when it routes traffic to this container.
 builder.Services.AddFoundryResponses(agent);
 
-// Local-dev only: Foundry normally injects x-agent-user-isolation-key and
-// x-agent-chat-isolation-key headers on every request so the hosting layer
-// can scope sessions per user/conversation. Without those headers the default
-// provider returns null and the request 500s. This fallback supplies stable
-// dev keys so dotnet run / docker run work out of the box. In production the
-// platform-supplied values flow through context.Isolation untouched.
-if (builder.Environment.IsDevelopment())
-{
-    builder.Services.AddSingleton<HostedSessionIsolationKeyProvider, LocalDevIsolationKeyProvider>();
-}
+// Foundry normally injects x-agent-user-isolation-key and x-agent-chat-isolation-key
+// headers on every request so the hosting layer can scope sessions per user/conversation.
+// Without those headers the default provider returns null and every request 500s.
+// LocalDevIsolationKeyProvider supplies fallback keys when the headers are missing
+// (local dev) and passes real values through untouched when they're present (in Foundry),
+// so it's safe to register unconditionally.
+builder.Services.AddSingleton<HostedSessionIsolationKeyProvider, LocalDevIsolationKeyProvider>();
 
 var app = builder.Build();
 app.MapFoundryResponses();
