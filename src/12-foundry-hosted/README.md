@@ -98,20 +98,24 @@ Three things to notice:
 
 ## Step 2 — Run it locally with `dotnet run`
 
-Set config (same env vars the rest of the repo uses — if you already exported
-them per [`docs/prerequisites.md`](../../docs/prerequisites.md), skip this):
+Assuming you exported `AZURE_OPENAI_ENDPOINT` and `AZURE_OPENAI_DEPLOYMENT_NAME`
+per [`docs/prerequisites.md`](../../docs/prerequisites.md):
 
 ```bash
 cd src/12-foundry-hosted
-dotnet user-secrets set "AZURE_OPENAI_ENDPOINT" \
-  "https://<account>.services.ai.azure.com"
-dotnet user-secrets set "AZURE_OPENAI_DEPLOYMENT_NAME" "gpt-4o-mini"
 dotnet run
 ```
 
 The agent starts on `http://localhost:8088`. Open `requests.http` and send the
 first request. You should get back a JSON envelope shaped like the OpenAI
 Responses API.
+
+> **Note on config sources.** Unlike most modules in this repo, Module 12 reads
+> from `Environment.GetEnvironmentVariable` directly (not `IConfiguration`)
+> because `AgentHost.CreateBuilder` is purpose-built for hosted-agent
+> containers and Foundry only injects values via OS environment variables.
+> That means **`dotnet user-secrets` is not picked up here** — use exported
+> shell env vars (the prerequisites flow) or a `.env` file loaded by your shell.
 
 > **Note on `AGENT_NAME`.** When Foundry runs the container in the cloud it
 > injects `AGENT_NAME` so the same image can back multiple versions. Locally
