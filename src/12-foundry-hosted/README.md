@@ -16,9 +16,10 @@ you and clients call it through the OpenAI **Responses protocol**.
   `AddAIAgent()` + `MapHttpA2A()` when Foundry runs the container
 - Why a Foundry-hosted agent is **one container per agent** (vs. Module 10's
   three agents in one process)
-- What `agent.yaml` declares (`kind`, `protocols`, `resources`) and how Foundry
-  uses it to provision the platform agent version
-- The full local-loop: `dotnet run` → `docker run` → `azd ai agent deploy`
+- What `agent.manifest.yaml` declares (`template.kind`, `protocols`, `resources`,
+  `environment_variables`) and how Foundry uses it to provision the platform
+  agent version
+- The full local-loop: `dotnet run` → `docker run` → `azd up`
 
 ## When to use this pattern
 
@@ -41,14 +42,17 @@ process, the transport, or you have an existing A2A client ecosystem.
 
 In addition to the [repo prerequisites](../../docs/prerequisites.md), you'll need:
 
-- **.NET 10 SDK** (this is the only module that requires .NET 10 — the Foundry
-  Hosting preview targets `net10.0`)
 - **Docker** (or Podman) for the local container loop
 - An **Azure AI Foundry project** with a deployed chat model (`gpt-4o-mini`
   works well) — same project you used for Module 11 is fine
 - **Azure CLI** logged in: `az login`
-- **Azure Developer CLI** with the AI agent extension installed: `azd version`
-  ≥ 1.18 (see [azd installation](https://learn.microsoft.com/azure/developer/azure-developer-cli/install-azd))
+- **Azure Developer CLI** ≥ **1.23.0** with the Foundry agents extension installed:
+  ```bash
+  azd version           # confirm ≥ 1.23.0
+  azd ext install azure.ai.agents
+  ```
+  (Required by the refreshed-preview hosting backend — earlier `azd` versions
+  call the retired hosting APIs.)
 - A container registry Foundry can pull from. `azd ai agent deploy` will create
   one for you on first deploy if you don't have one.
 
@@ -73,8 +77,11 @@ speaks the OpenAI **Responses protocol**:
 // Module 12
 AIAgent agent = new AIProjectClient(endpoint, credential)
     .AsAIAgent(model, instructions, name, description);
+
+var builder = AgentHost.CreateBuilder(args);
 builder.Services.AddFoundryResponses(agent);
-app.MapFoundryResponses();
+builder.RegisterProtocol("responses", e => e.MapFoundryResponses());
+builder.Build().Run();
 ```
 
 Three things to notice:
@@ -108,9 +115,9 @@ Responses API.
 
 > **Note on `AGENT_NAME`.** When Foundry runs the container in the cloud it
 > injects `AGENT_NAME` so the same image can back multiple versions. Locally
-> we default to `trip-planner` — the same value that lives in `agent.yaml` and
-> in the `model` field of the `requests.http` payloads. If you rename the
-> agent, change all three.
+> we default to `trip-planner` — the same value that lives in
+> `agent.manifest.yaml` and in the `model` field of the `requests.http`
+> payloads. If you rename the agent, change all three.
 
 > **Note on isolation keys.** Foundry's hosting layer scopes sessions by two
 > required headers: `x-agent-user-isolation-key` and `x-agent-chat-isolation-key`.
@@ -155,31 +162,47 @@ Re-run the requests in `requests.http`. Same agent, now coming from a container.
 
 ## Step 4 — Deploy to Foundry
 
-Once the container runs cleanly locally, push it into Foundry:
+Once the container runs cleanly locally, push it into Foundry. The refreshed
+preview uses an `azd ai agent init` → `azd up` flow:
 
 ```bash
 cd src/12-foundry-hosted
 
-# Point azd at your Foundry project (one-time per shell)
+# One-time per shell: point azd at your Foundry project
 azd env set AZURE_OPENAI_ENDPOINT \
-  "https://<account>.services.ai.azure.com"
+  "https://<account>.services.ai.azure.com/api/projects/<project>"
 
-# Build, push to a registry, register with Foundry
-azd ai agent deploy
+# Initialize an azd environment from this folder's manifest (first deploy only)
+azd ai agent init -m ./agent.manifest.yaml
+
+# Build, push to the project's registry, register/update the hosted agent version
+azd up
 ```
 
-`azd ai agent deploy` reads `agent.yaml`, builds and pushes the image, creates
-(or updates) the platform agent version, assigns a managed identity, and waits
-until the version status is `Active`. Provisioning a new version typically
-takes 2–5 minutes.
+`azd ai agent init` reads `agent.manifest.yaml`, prompts for / reuses your
+Foundry project and model deployment, and writes an `azure.yaml` for `azd up`
+to use. `azd up` then builds the image, pushes it, and creates (or updates) the
+hosted agent version, assigning it a dedicated managed identity. Provisioning a
+new version typically takes 2–5 minutes; wait until the version status reads
+`active`.
 
 Verify in [ai.azure.com](https://ai.azure.com) — open your project, go to
 **Agents**, and you should see `trip-planner` listed alongside Module 11's
 Prompt Agent. Click it to see its endpoint URL, container image, and live logs.
 
-To call the deployed agent from your own code, swap the endpoint in
-`requests.http` (or any client) to the Foundry-issued URL — the Responses
-payload shape is identical.
+To call the deployed agent from your own code, the endpoint shape is:
+
+```
+{project_endpoint}/agents/trip-planner/endpoint/protocols/openai/responses
+```
+
+Swap that into `requests.http` (or any client) — the Responses payload shape
+is identical to the local one.
+
+> **Note on identity.** The refreshed preview gives each hosted agent its own
+> Entra identity at deploy time (no more shared project managed identity). If
+> your agent reads from Key Vault, Storage, etc., grant RBAC to **the agent's**
+> identity, not the project's.
 
 ---
 
@@ -189,9 +212,9 @@ payload shape is identical.
 
 Edit the `instructions:` string in `Program.cs` so TripBot specializes in
 **budget travel under $1000/trip**. Run locally, hit it from `requests.http`,
-and confirm the responses change. Then redeploy with `azd ai agent deploy` —
-Foundry creates a new **version** of the same agent, so the old version stays
-addressable while the new one rolls out.
+and confirm the responses change. Then redeploy with `azd up` — Foundry creates
+a new **version** of the same agent, so the old version stays addressable while
+the new one rolls out.
 
 ### 🟡 Intermediate — Add a function tool
 
@@ -211,14 +234,15 @@ is fine for the lesson). Ask the agent for an itinerary "with costs in EUR"
 and confirm it calls the tool. This proves the **same** tool plumbing from
 Modules 02 and 07 still works inside a Foundry-hosted container.
 
-### 🔴 Stretch — Lift the weather agent into a second container
+### Stretch — Lift the weather agent into a second container
 
 Module 10's `weather` agent is still self-hosted. Create
 `src/12-foundry-hosted-weather/` (copy this folder), change the agent name,
-instructions, description, and `agent.yaml.name` to `weather`, and deploy it
-as a **second** hosted agent. Then call both deployed agents from a single
-client to confirm two hosted agents can co-exist under one Foundry project —
-the same separation-of-concerns Module 10 had, but now operated by Foundry.
+instructions, description, and `agent.manifest.yaml` name fields to `weather`,
+and deploy it as a **second** hosted agent. Then call both deployed agents from
+a single client to confirm two hosted agents can co-exist under one Foundry
+project — the same separation-of-concerns Module 10 had, but now operated by
+Foundry.
 
 > **Hint:** Foundry hosted agents are 1:1 with containers. If you want them
 > to call each other, give one the other's endpoint as configuration and have
@@ -259,21 +283,26 @@ dotnet run                          # fails — fill in the TODOs
   follow-up calls with `previous_response_id`
 - Installs the User-Agent and identity policies the Foundry runtime relies on
 
-### What `agent.yaml` controls
+### What `agent.manifest.yaml` controls
 
-- `kind: hosted` — tells Foundry this is a container-backed agent (vs a Prompt
-  Agent from Module 11)
-- `protocols` — Foundry hosted agents support `responses` and `activityprotocol`
-  (Bot Framework). A2A is **not** in this list, which is why Module 10's
-  endpoint can't be lifted directly.
-- `resources.cpu` / `resources.memory` — provisioning sizing for the container
+- `template.kind: hosted` — tells Foundry this is a container-backed agent (vs
+  a Prompt Agent from Module 11)
+- `template.protocols` — Foundry hosted agents support `responses`,
+  `invocations`, and `activity` (Bot Framework). A2A is **not** in this list,
+  which is why Module 10's endpoint can't be lifted directly.
+- `template.resources.cpu` / `template.resources.memory` — container sizing
+- `template.environment_variables` — what platform values get exposed into the
+  container (we map `FOUNDRY_PROJECT_ENDPOINT` → `AZURE_OPENAI_ENDPOINT` so the
+  code matches the rest of the repo)
+- Top-level `resources:` — declares downstream Azure resources (here: the
+  model deployment). `azd ai agent init` uses this to wire up / provision them.
 
 ---
 
 ## Anti-patterns to avoid
 
 ❌ **Trying to expose A2A from a Foundry-hosted container.** The platform only
-routes the protocols listed in `agent.yaml`, and A2A isn't a valid value.
+routes the protocols listed in `agent.manifest.yaml`, and A2A isn't a valid value.
 
 ❌ **Putting multiple agents in one hosted container.** Foundry's agent-name
 routing is per-container — only the agent matching `AGENT_NAME` will be
@@ -288,16 +317,18 @@ logic; only `docker run` validates that your image actually starts under a
 managed-identity-style credential. Skipping it pushes failures into Foundry,
 where they cost minutes per round-trip.
 
-❌ **Deploying every code change as a new agent.** Use `azd ai agent deploy`
-on the same `agent.yaml` to push new **versions** of the same agent — clients
-keep their URLs and Foundry handles the rollover.
+❌ **Deploying every code change as a new agent.** Re-run `azd up` against the
+same manifest to push new **versions** of the same agent — clients keep their
+URLs and Foundry handles the rollover.
 
 ## References
 
-- [Microsoft Agent Framework — Foundry Hosting samples](https://github.com/microsoft/agent-framework/tree/main/dotnet/samples/04-hosting/FoundryHostedAgents/responses)
+- [Migrate Hosted agents from initial public preview](https://learn.microsoft.com/azure/foundry/agents/how-to/migrate-hosted-agent-preview) — the doc that defines the refreshed-preview pattern this module follows
+- [Microsoft-Foundry .NET Hosted Agent samples](https://github.com/microsoft-foundry/foundry-samples/tree/main/samples/csharp/hosted-agents/agent-framework)
 - [`Microsoft.Agents.AI.Foundry.Hosting` on NuGet](https://www.nuget.org/packages/Microsoft.Agents.AI.Foundry.Hosting)
+- [`Azure.AI.AgentServer.Core` on NuGet](https://www.nuget.org/packages/Azure.AI.AgentServer.Core)
 - [Foundry Hosted Agents overview](https://learn.microsoft.com/azure/foundry/agents/overview)
-- [Container Agent schema](https://raw.githubusercontent.com/microsoft/AgentSchema/refs/heads/main/schemas/v1.0/ContainerAgent.yaml)
+- [Agent manifest schema](https://raw.githubusercontent.com/microsoft/AgentSchema/refs/heads/main/schemas/v1.0/AgentManifest.yaml)
 - [`azd ai agent` reference](https://learn.microsoft.com/azure/developer/azure-developer-cli/reference)
 
 ---

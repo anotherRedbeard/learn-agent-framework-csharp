@@ -7,19 +7,20 @@
 //
 // Reference: completed solution in this folder's git history.
 
+using Azure.AI.AgentServer.Core;
 using Azure.AI.Projects;
 using Azure.Identity;
 using Microsoft.Agents.AI;
-
-var builder = WebApplication.CreateBuilder(args);
+using Microsoft.Agents.AI.Foundry.Hosting;
 
 // TODO 1: Read AGENT_NAME from the environment (Foundry injects this at runtime).
 //         Fall back to a stable local name like "trip-planner" so curl tests work.
 string agentName = throw new NotImplementedException("TODO 1");
 
 // TODO 2: Read AZURE_OPENAI_ENDPOINT and AZURE_OPENAI_DEPLOYMENT_NAME from
-//         builder.Configuration. Throw a clear InvalidOperationException if either
-//         is missing — the container has nothing to talk to without them.
+//         Environment.GetEnvironmentVariable. Throw a clear InvalidOperationException
+//         if either is missing — the container has nothing to talk to without them.
+//         (The manifest maps the cloud's FOUNDRY_PROJECT_ENDPOINT into AZURE_OPENAI_ENDPOINT.)
 string endpoint = throw new NotImplementedException("TODO 2");
 string deployment = throw new NotImplementedException("TODO 2");
 
@@ -29,12 +30,13 @@ string deployment = throw new NotImplementedException("TODO 2");
 //         - Use the same TripBot instructions you ported from Module 10's travel agent
 AIAgent agent = throw new NotImplementedException("TODO 3");
 
-// TODO 4: Register the agent with Foundry hosting:
+// TODO 4: Use the refreshed-preview hosting pattern:
+//         var builder = AgentHost.CreateBuilder(args);
 //         builder.Services.AddFoundryResponses(agent);
+//         builder.RegisterProtocol("responses", endpoints => endpoints.MapFoundryResponses());
 
-// TODO 5: Build the app and map the Responses endpoint:
+// TODO 5: Build and run:
 //         var app = builder.Build();
-//         app.MapFoundryResponses();
 //         app.Run();
 //
 // Note: every request must include x-agent-user-isolation-key and

@@ -1,0 +1,45 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/microsoft/AgentSchema/refs/heads/main/schemas/v1.0/AgentManifest.yaml
+#
+# Foundry agent manifest (refreshed public preview schema).
+# `azd ai agent deploy` reads this file to build the image, push it to your
+# Foundry project's container registry, and register the hosted agent version.
+# The `template.name` here MUST match the AGENT_NAME the running container sees.
+name: trip-planner
+displayName: "Trip Planner"
+
+description: >
+  A travel itinerary planner hosted as a Foundry Hosted Agent using the Agent Framework.
+
+metadata:
+  tags:
+    - Agent Framework
+    - Responses Protocol
+    - Foundry Hosted Agent
+
+template:
+  name: trip-planner
+  kind: hosted
+  protocols:
+    - protocol: responses
+      version: 1.0.0
+  resources:
+    cpu: "0.25"
+    memory: 0.5Gi
+  # Map platform-supplied values into the env vars our Program.cs already reads.
+  # FOUNDRY_PROJECT_ENDPOINT is injected by Foundry at runtime; we expose it as
+  # AZURE_OPENAI_ENDPOINT so the code matches the rest of the repo.
+  environment_variables:
+    - name: AZURE_OPENAI_ENDPOINT
+      value: "{{FOUNDRY_PROJECT_ENDPOINT}}"
+    - name: AZURE_OPENAI_DEPLOYMENT_NAME
+      value: "{{AZURE_OPENAI_DEPLOYMENT_NAME}}"
+
+parameters:
+  properties: []
+
+# Declare the chat model deployment this agent depends on. `azd ai agent init`
+# will prompt for / create this if it doesn't already exist in your project.
+resources:
+  - kind: model
+    id: gpt-4o-mini
+    name: AZURE_OPENAI_DEPLOYMENT_NAME
