@@ -12,13 +12,14 @@ using Microsoft.Agents.AI.Foundry.Hosting;
 // requests and the deployed manifest line up.
 string agentName = Environment.GetEnvironmentVariable("AGENT_NAME") ?? "trip-planner";
 
-// In the cloud Foundry injects FOUNDRY_PROJECT_ENDPOINT into the container.
-// Locally we use the repo-wide AZURE_OPENAI_ENDPOINT convention; the manifest's
-// environment_variables block maps FOUNDRY_PROJECT_ENDPOINT → AZURE_OPENAI_ENDPOINT
-// at deploy time so the same code runs in both places.
-string endpoint = Environment.GetEnvironmentVariable("AZURE_OPENAI_ENDPOINT")
+// Foundry auto-injects FOUNDRY_PROJECT_ENDPOINT into hosted containers (and
+// `azd ai agent run` sets it locally). For pure `dotnet run` / `docker run`
+// flows we fall back to AZURE_OPENAI_ENDPOINT so the rest of the repo's
+// convention still works.
+string endpoint = Environment.GetEnvironmentVariable("FOUNDRY_PROJECT_ENDPOINT")
+    ?? Environment.GetEnvironmentVariable("AZURE_OPENAI_ENDPOINT")
     ?? throw new InvalidOperationException(
-        "AZURE_OPENAI_ENDPOINT is not set. Use dotnet user-secrets or environment variables.");
+        "Neither FOUNDRY_PROJECT_ENDPOINT nor AZURE_OPENAI_ENDPOINT is set.");
 string deployment = Environment.GetEnvironmentVariable("AZURE_OPENAI_DEPLOYMENT_NAME")
     ?? throw new InvalidOperationException("AZURE_OPENAI_DEPLOYMENT_NAME is not set.");
 

@@ -25,12 +25,10 @@ template:
   resources:
     cpu: "0.25"
     memory: 0.5Gi
-  # Map platform-supplied values into the env vars our Program.cs already reads.
-  # FOUNDRY_PROJECT_ENDPOINT is injected by Foundry at runtime; we expose it as
-  # AZURE_OPENAI_ENDPOINT so the code matches the rest of the repo.
+  # Foundry auto-injects FOUNDRY_PROJECT_ENDPOINT into the container; we don't
+  # need to map it here. We only need to template values that azd resolves at
+  # deploy time — the model deployment name comes from --model-deployment / -d.
   environment_variables:
-    - name: AZURE_OPENAI_ENDPOINT
-      value: "{{FOUNDRY_PROJECT_ENDPOINT}}"
     - name: AZURE_OPENAI_DEPLOYMENT_NAME
       value: "{{AZURE_OPENAI_DEPLOYMENT_NAME}}"
 
