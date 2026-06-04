@@ -169,9 +169,15 @@ docker run --rm -p 8088:8088 \
 Re-run the requests in `requests.http`. Same agent, now coming from a container.
 
 > **Why a bearer token?** `DefaultAzureCredential` inside the container has no
-> way to do `az login`. Foundry solves this in production with a **managed
-> identity** assigned to the hosted agent. Locally we substitute a bearer token
-> from your already-authenticated host.
+> way to do `az login` — there's no Azure CLI, no managed identity endpoint, no
+> Visual Studio token cache. Foundry solves this in production by assigning the
+> hosted agent its own **managed identity**, which `DefaultAzureCredential`
+> picks up automatically. Locally we substitute a bearer token minted from your
+> already-authenticated host: `Program.cs` notices `AZURE_BEARER_TOKEN` is set
+> and uses a small `StaticTokenCredential` that hands it back verbatim, instead
+> of going through `DefaultAzureCredential`. Tokens from `az account
+> get-access-token` last ~60 minutes — re-export and re-run `docker run` if
+> your session lasts longer.
 
 ---
 

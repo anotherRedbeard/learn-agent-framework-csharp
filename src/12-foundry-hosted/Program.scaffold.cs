@@ -25,7 +25,11 @@ string endpoint = throw new NotImplementedException("TODO 2");
 string deployment = throw new NotImplementedException("TODO 2");
 
 // TODO 3: Build the AIAgent.
-//         - Construct an AIProjectClient(endpoint, DefaultAzureCredential)
+//         - Pick a credential: if AZURE_BEARER_TOKEN is set, use a small
+//           StaticTokenCredential that returns it verbatim (for `docker run`
+//           locally — there's no az CLI inside the container). Otherwise use
+//           DefaultAzureCredential.
+//         - Construct an AIProjectClient(endpoint, credential)
 //         - Call .AsAIAgent(model, instructions, name, description)
 //         - Use the same TripBot instructions you ported from Module 10's travel agent
 AIAgent agent = throw new NotImplementedException("TODO 3");

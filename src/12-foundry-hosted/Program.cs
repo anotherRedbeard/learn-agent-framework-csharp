@@ -1,5 +1,8 @@
+using System.Threading;
+using System.Threading.Tasks;
 using Azure.AI.AgentServer.Core;
 using Azure.AI.Projects;
+using Azure.Core;
 using Azure.Identity;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Foundry.Hosting;
@@ -19,10 +22,28 @@ string endpoint = Environment.GetEnvironmentVariable("AZURE_OPENAI_ENDPOINT")
 string deployment = Environment.GetEnvironmentVariable("AZURE_OPENAI_DEPLOYMENT_NAME")
     ?? throw new InvalidOperationException("AZURE_OPENAI_DEPLOYMENT_NAME is not set.");
 
+// Pick a credential based on environment.
+//
+// * `dotnet run` locally → DefaultAzureCredential walks the chain and finds your
+//   `az login` token. No extra config needed.
+// * `docker run` locally → DefaultAzureCredential has nothing to find inside the
+//   container (no az CLI, no managed identity endpoint). The README's Step 3
+//   shows you how to mint a short-lived bearer token on the host with
+//   `az account get-access-token` and pass it in as AZURE_BEARER_TOKEN. When
+//   that env var is present, we use it via a tiny StaticTokenCredential so the
+//   container can authenticate without bundling the Azure CLI.
+// * In Foundry hosting → Foundry assigns the agent its own managed identity, so
+//   DefaultAzureCredential's ManagedIdentityCredential leg picks it up and the
+//   AZURE_BEARER_TOKEN escape hatch is never used.
+string? bearerToken = Environment.GetEnvironmentVariable("AZURE_BEARER_TOKEN");
+TokenCredential credential = string.IsNullOrWhiteSpace(bearerToken)
+    ? new DefaultAzureCredential()
+    : new StaticTokenCredential(bearerToken!);
+
 // Same agent persona as Module 10's "travel" agent — only the *hosting model*
 // changes. Module 10 ran behind A2A on your machine; here, the same agent runs
 // inside a Foundry-managed container and speaks the OpenAI Responses protocol.
-AIAgent agent = new AIProjectClient(new Uri(endpoint), new DefaultAzureCredential())
+AIAgent agent = new AIProjectClient(new Uri(endpoint), credential)
     .AsAIAgent(
         model: deployment,
         instructions: """
@@ -49,3 +70,23 @@ builder.RegisterProtocol("responses", endpoints => endpoints.MapFoundryResponses
 
 var app = builder.Build();
 app.Run();
+
+// Minimal TokenCredential that returns a caller-supplied access token verbatim.
+// Useful for local `docker run` where you've minted a short-lived token on the
+// host (e.g. via `az account get-access-token`) and want the container to use
+// it without installing the Azure CLI or wiring up a service principal.
+// Tokens from `az account get-access-token` are valid for ~1 hour — long enough
+// for an interactive container test session.
+sealed class StaticTokenCredential(string token) : TokenCredential
+{
+    // We don't know the real expiry of the supplied token; we just have to
+    // hand it back when asked. Use 50 minutes as a conservative TTL — slightly
+    // less than `az`'s default 60-minute access token lifetime.
+    private readonly AccessToken _token = new(token, DateTimeOffset.UtcNow.AddMinutes(50));
+
+    public override AccessToken GetToken(TokenRequestContext requestContext, CancellationToken cancellationToken)
+        => _token;
+
+    public override ValueTask<AccessToken> GetTokenAsync(TokenRequestContext requestContext, CancellationToken cancellationToken)
+        => new(_token);
+}
