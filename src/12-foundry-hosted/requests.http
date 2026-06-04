@@ -1,14 +1,17 @@
 ### Module 12 — Foundry-hosted Responses agent
 # Hit this against either:
-#   - your local dotnet run / docker run  (http://localhost:8088)
-#   - the deployed Foundry agent endpoint (set @host accordingly)
+#   - your local dotnet run / docker run  (set @host = http://localhost:8088)
+#   - the deployed Foundry agent endpoint (set @host = your project endpoint
+#     AND @path = the agent-scoped subpath; see the "cloud" examples at the
+#     bottom of this file)
 
 @host = http://localhost:8088
+@path = /responses
 @agent = trip-planner
+@apiVersion = 2025-05-01
 
-# When @host points at the deployed Foundry endpoint instead of localhost,
-# every request must include `Authorization: Bearer {{token}}`. Mint a token
-# from your terminal (60-min lifetime) and paste it into @token:
+# When @host points at the deployed Foundry endpoint, every request must
+# include `Authorization: Bearer {{token}}`. Mint a token (60-min lifetime):
 #   az account get-access-token --resource https://ai.azure.com --query accessToken -o tsv
 @token = paste-token-here
 
@@ -20,7 +23,7 @@
 @chatKey = local-dev-chat
 
 ### 1. Simple non-streaming request
-POST {{host}}/responses
+POST {{host}}{{path}}
 Content-Type: application/json
 Authorization: Bearer {{token}}
 x-agent-user-isolation-key: {{userKey}}
@@ -44,7 +47,7 @@ x-agent-chat-isolation-key: {{chatKey}}
 #     -H "x-agent-user-isolation-key: local-dev-user" \
 #     -H "x-agent-chat-isolation-key: local-dev-chat" \
 #     -d '{"input":"Suggest a one-day food crawl in Lisbon.","model":"trip-planner","stream":true}'
-POST {{host}}/responses
+POST {{host}}{{path}}
 Content-Type: application/json
 Authorization: Bearer {{token}}
 x-agent-user-isolation-key: {{userKey}}
@@ -60,7 +63,7 @@ x-agent-chat-isolation-key: {{chatKey}}
 # Pass the previous response.id in `previous_response_id` to keep the
 # server-side conversation state going (the Responses-protocol equivalent of
 # Module 10's `contextId`).
-POST {{host}}/responses
+POST {{host}}{{path}}
 Content-Type: application/json
 Authorization: Bearer {{token}}
 x-agent-user-isolation-key: {{userKey}}
@@ -70,4 +73,35 @@ x-agent-chat-isolation-key: {{chatKey}}
   "input": "What about vegetarian options on that crawl?",
   "model": "{{agent}}",
   "previous_response_id": "<paste id from a previous response here>"
+}
+
+###############################################################################
+# Deployed-on-Foundry recipe
+#
+# When hitting the hosted agent, the URL shape is different from local. The
+# request goes to your *project endpoint*, not the agent's own hostname, and
+# the path is scoped under /agents/{name}/endpoint/protocols/openai/...
+# A `Foundry-Features: HostedAgents=V1Preview` header is REQUIRED during the
+# preview — without it you get HTTP 400 `preview_feature_required`.
+#
+# To switch the requests above to cloud mode, override the variables:
+#   1) @host  → your project endpoint (NOT the agent hostname). Example:
+#               https://tripbot-foundry.services.ai.azure.com/api/projects/tripbot-project
+#   2) @path  → /agents/{{agent}}/endpoint/protocols/openai/responses?api-version={{apiVersion}}
+#   3) @token → az account get-access-token --resource https://ai.azure.com --query accessToken -o tsv
+#
+# Then also add `Foundry-Features: HostedAgents=V1Preview` to each request
+# header block (or use the standalone example below).
+###############################################################################
+
+### 4. Deployed agent — non-streaming
+# Set @host and @path to the cloud values described above before sending.
+POST {{host}}/agents/{{agent}}/endpoint/protocols/openai/responses?api-version={{apiVersion}}
+Content-Type: application/json
+Authorization: Bearer {{token}}
+Foundry-Features: HostedAgents=V1Preview
+
+{
+  "input": "Plan a 3-day trip to Tokyo in cherry blossom season.",
+  "model": "{{agent}}"
 }

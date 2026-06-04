@@ -251,19 +251,56 @@ Verify in [ai.azure.com](https://ai.azure.com) — open your project, go to
 **Agents**, and you should see `trip-planner` listed alongside Module 11's
 Prompt Agent. Click it to see its endpoint URL, container image, and live logs.
 
-To call the deployed agent from your own code, the endpoint shape is:
+### Calling the deployed agent
 
+The deployed endpoint is **not** `https://{agent-host}/responses` like the
+local server. It's scoped under your project endpoint with an agent subpath,
+and the refreshed preview requires a feature header:
+
+```http
+POST {project_endpoint}/agents/trip-planner/endpoint/protocols/openai/responses?api-version=2025-05-01
+Authorization: Bearer <token>
+Foundry-Features: HostedAgents=V1Preview        # ← required during preview
+Content-Type: application/json
+
+{ "input": "Plan a 3-day trip to Tokyo.", "model": "trip-planner" }
 ```
-{project_endpoint}/agents/trip-planner/endpoint/protocols/openai/responses
+
+Mint a token with:
+
+```bash
+az account get-access-token --resource https://ai.azure.com --query accessToken -o tsv
 ```
 
-Swap that into `requests.http` (or any client) — the Responses payload shape
-is identical to the local one.
+The `Foundry-Features` header is mandatory — without it the endpoint returns
+HTTP 400 `preview_feature_required`. The SDK sets it automatically; raw REST
+clients (curl, VS Code REST Client) must add it themselves. See the "Deployed
+agent" example in `requests.http`.
 
-> **Note on identity.** The refreshed preview gives each hosted agent its own
-> Entra identity at deploy time (no more shared project managed identity). If
-> your agent reads from Key Vault, Storage, etc., grant RBAC to **the agent's**
-> identity, not the project's.
+### Identity & RBAC for the deployed agent
+
+The refreshed preview gives each hosted agent its own **Agent Entra Identity**
+at deploy time (visible in the Foundry portal at the agent level — _not_ the
+same as the project's system-assigned MI). When the container calls the model
+or any other Azure resource, it authenticates as that identity via
+`DefaultAzureCredential`.
+
+To actually let the agent call the model you must:
+
+1. **Grant RBAC to the agent's identity** on the Foundry account
+   (`tripbot-foundry`). The required role is **Foundry User** (recently renamed
+   from "Azure AI User" — same role ID, both names work during the rollout).
+   In the portal: Foundry resource → Access control (IAM) → Add role
+   assignment → Foundry User → assign to the agent's principal (find its
+   object ID on the agent's identity page).
+2. **Wait 5–15 minutes** for AAD role propagation. The first few requests
+   after grant can return `ManagedIdentityCredential` failures even with the
+   role assigned — this is normal AAD behavior, not a misconfiguration.
+3. If your agent reads from Key Vault, Storage, etc., grant those resources
+   RBAC to the **same** agent identity (not the project MI).
+
+`azd up` provisions the agent identity but does **not** assign downstream
+RBAC for you — that step is yours.
 
 ---
 
