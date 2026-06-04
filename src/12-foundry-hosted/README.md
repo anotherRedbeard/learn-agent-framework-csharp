@@ -240,16 +240,98 @@ azd ai agent init -m ./agent.manifest.yaml --src . --force --agent-name trip-pla
 azd up
 ```
 
+### Flavor C — Pure REST (CI/CD pipelines)
+
+For production CI/CD where you don't want to depend on `azd`, you can build
+and push the image yourself and register the agent version via the Foundry
+REST API. This is the path automation pipelines should take.
+
+```bash
+# 1. Build & push to your ACR (any ACR Foundry can pull from)
+ACR=myregistry.azurecr.io
+docker build --platform linux/amd64 -t $ACR/trip-planner:v1 .
+az acr login --name myregistry
+docker push $ACR/trip-planner:v1
+
+# 2. Register a new agent version (or create the agent if it doesn't exist)
+TOKEN=$(az account get-access-token --resource https://ai.azure.com --query accessToken -o tsv)
+az rest --method POST \
+  --uri "$PROJECT_ENDPOINT/agents/trip-planner/versions?api-version=v1" \
+  --headers "Authorization=Bearer $TOKEN" \
+            "Foundry-Features=HostedAgents=V1Preview" \
+            "Content-Type=application/json" \
+  --body '{
+    "definition": {
+      "kind": "hosted",
+      "image": "'$ACR'/trip-planner:v1",
+      "protocols": ["responses"],
+      "resources": { "cpu": 1, "memory": "2Gi" },
+      "environment_variables": [
+        { "name": "AZURE_OPENAI_DEPLOYMENT_NAME", "value": "gpt-4o-mini" }
+      ]
+    }
+  }'
+```
+
+> **Heads up:** Flavor C does **not** create an Agent Entra Identity or assign
+> any RBAC. You must do both manually after the first POST (see the RBAC
+> section below). Flavors A and B do create the identity for you — but per
+> the next section, they may still skip the role assignment silently.
+
 ---
 
 `azd up` builds the image, pushes it to the project's registry, and creates
-(or updates) the hosted agent version with its own dedicated managed
-identity. Provisioning a new version typically takes 2–5 minutes; wait
+(or updates) the hosted agent version with its own dedicated **Agent Entra
+Identity**. Provisioning a new version typically takes 2–5 minutes; wait
 until the version status reads `active`.
 
 Verify in [ai.azure.com](https://ai.azure.com) — open your project, go to
 **Agents**, and you should see `trip-planner` listed alongside Module 11's
 Prompt Agent. Click it to see its endpoint URL, container image, and live logs.
+
+### Identity & RBAC — do this *before* calling the agent
+
+> ⚠️ **Read this section even if `azd up` succeeded.** As of `azd ai agent`
+> extension version 0.1.25, RBAC assignment failures during `azd up` are
+> **warnings, not errors** — the deploy reports success even if the agent's
+> identity ends up with no role on the Foundry account. The most common
+> symptom is the **playground returning HTTP 500** with a
+> `ManagedIdentityCredential` failure inside `FoundryStorageProvider` (the
+> hosted runtime's own session storage). The fix is always: assign **Foundry
+> User** to the agent identity at **account scope**.
+
+Each hosted agent has its own **Agent Entra Identity** (visible in the
+Foundry portal at the agent level — _not_ the same as the project's
+system-assigned MI). When the container calls the model, reads session
+history, or hits any other Azure resource, it authenticates as that identity
+via `DefaultAzureCredential`.
+
+To grant access:
+
+```bash
+# 1. Get the agent identity's object ID from the Foundry portal:
+#    Agents → trip-planner → Identity tab → copy the Object (principal) ID
+AGENT_OID=<paste-here>
+
+# 2. Get the Foundry account (cognitive services) resource ID
+FOUNDRY_ID=$(az cognitiveservices account show \
+  -g <your-rg> -n tripbot-foundry --query id -o tsv)
+
+# 3. Assign Foundry User at the account scope (not just the project)
+az role assignment create \
+  --assignee-object-id $AGENT_OID \
+  --assignee-principal-type ServicePrincipal \
+  --role "Foundry User" \
+  --scope $FOUNDRY_ID
+```
+
+Then **wait 5–15 minutes** for AAD propagation. The first few requests after
+grant can still fail with `ManagedIdentityCredential` errors even with the
+role assigned — this is normal AAD timing, not a misconfiguration.
+
+If your agent reads from Key Vault, Storage, AI Search, etc., grant those
+resources RBAC to the **same** agent identity (not the project MI). `azd up`
+provisions the identity but does not wire downstream RBAC for you.
 
 ### Calling the deployed agent
 
@@ -276,31 +358,6 @@ The `Foundry-Features` header is mandatory — without it the endpoint returns
 HTTP 400 `preview_feature_required`. The SDK sets it automatically; raw REST
 clients (curl, VS Code REST Client) must add it themselves. See the "Deployed
 agent" example in `requests.http`.
-
-### Identity & RBAC for the deployed agent
-
-The refreshed preview gives each hosted agent its own **Agent Entra Identity**
-at deploy time (visible in the Foundry portal at the agent level — _not_ the
-same as the project's system-assigned MI). When the container calls the model
-or any other Azure resource, it authenticates as that identity via
-`DefaultAzureCredential`.
-
-To actually let the agent call the model you must:
-
-1. **Grant RBAC to the agent's identity** on the Foundry account
-   (`tripbot-foundry`). The required role is **Foundry User** (recently renamed
-   from "Azure AI User" — same role ID, both names work during the rollout).
-   In the portal: Foundry resource → Access control (IAM) → Add role
-   assignment → Foundry User → assign to the agent's principal (find its
-   object ID on the agent's identity page).
-2. **Wait 5–15 minutes** for AAD role propagation. The first few requests
-   after grant can return `ManagedIdentityCredential` failures even with the
-   role assigned — this is normal AAD behavior, not a misconfiguration.
-3. If your agent reads from Key Vault, Storage, etc., grant those resources
-   RBAC to the **same** agent identity (not the project MI).
-
-`azd up` provisions the agent identity but does **not** assign downstream
-RBAC for you — that step is yours.
 
 ---
 
