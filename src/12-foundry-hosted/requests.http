@@ -6,6 +6,12 @@
 @host = http://localhost:8088
 @agent = trip-planner
 
+# When @host points at the deployed Foundry endpoint instead of localhost,
+# every request must include `Authorization: Bearer {{token}}`. Mint a token
+# from your terminal (60-min lifetime) and paste it into @token:
+#   az account get-access-token --resource https://ai.azure.com --query accessToken -o tsv
+@token = paste-token-here
+
 # Foundry's hosting layer scopes sessions by these two headers. In production
 # Foundry sets them per user/conversation; locally you pick any stable strings.
 # Without them the server returns HTTP 500 (isolation key provider returns null).
@@ -16,6 +22,7 @@
 ### 1. Simple non-streaming request
 POST {{host}}/responses
 Content-Type: application/json
+Authorization: Bearer {{token}}
 x-agent-user-isolation-key: {{userKey}}
 x-agent-chat-isolation-key: {{chatKey}}
 
@@ -39,6 +46,7 @@ x-agent-chat-isolation-key: {{chatKey}}
 #     -d '{"input":"Suggest a one-day food crawl in Lisbon.","model":"trip-planner","stream":true}'
 POST {{host}}/responses
 Content-Type: application/json
+Authorization: Bearer {{token}}
 x-agent-user-isolation-key: {{userKey}}
 x-agent-chat-isolation-key: {{chatKey}}
 
@@ -54,6 +62,7 @@ x-agent-chat-isolation-key: {{chatKey}}
 # Module 10's `contextId`).
 POST {{host}}/responses
 Content-Type: application/json
+Authorization: Bearer {{token}}
 x-agent-user-isolation-key: {{userKey}}
 x-agent-chat-isolation-key: {{chatKey}}
 
