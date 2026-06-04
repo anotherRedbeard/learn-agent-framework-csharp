@@ -189,16 +189,22 @@ preview uses an `azd ai agent init` → `azd up` flow:
 ```bash
 cd src/12-foundry-hosted
 
-# One-time per shell: point azd at your Foundry project
+# 1. Initialize an azd environment from this folder's manifest (first deploy only).
+#    This creates the .azure/ folder — `azd env set` will fail until this runs.
+azd ai agent init -m ./agent.manifest.yaml
+
+# 2. Point the new azd environment at your Foundry project
 azd env set AZURE_OPENAI_ENDPOINT \
   "https://<account>.services.ai.azure.com/api/projects/<project>"
 
-# Initialize an azd environment from this folder's manifest (first deploy only)
-azd ai agent init -m ./agent.manifest.yaml
-
-# Build, push to the project's registry, register/update the hosted agent version
+# 3. Build, push to the project's registry, register/update the hosted agent version
 azd up
 ```
+
+> 💡 **Order matters.** `azd env set` writes into an azd environment that only
+> exists after `azd ai agent init` (or `azd init`) has scaffolded a `.azure/`
+> folder. Running `azd env set` first gives you:
+> `ERROR: no project exists; to create a new project, run azd init`.
 
 `azd ai agent init` reads `agent.manifest.yaml`, prompts for / reuses your
 Foundry project and model deployment, and writes an `azure.yaml` for `azd up`
