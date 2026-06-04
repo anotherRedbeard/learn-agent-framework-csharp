@@ -31,3 +31,5 @@ Thumbs.db
 .azure/
 azure.yaml
 infra/
+agent.yaml
+.agentignore
