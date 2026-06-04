@@ -25,9 +25,18 @@ x-agent-chat-isolation-key: {{chatKey}}
 }
 
 ### 2. Streaming request
-# Returns Server-Sent Events. The VS Code REST Client buffers SSE until the
-# stream closes, so this can sit silent for 10–30 seconds before rendering —
-# it's not hung. Use `curl --no-buffer` from a terminal to watch tokens arrive.
+# ⚠️ The VS Code REST Client does NOT render SSE incrementally. It buffers the
+# entire stream in memory and only displays it after the server closes the
+# connection — so for a long completion you'll stare at "running…" for 20-40s.
+# That's a UI limitation, not a hung server.
+#
+# To watch tokens actually arrive, run this in a terminal instead:
+#
+#   curl --no-buffer -X POST http://localhost:8088/responses \
+#     -H "Content-Type: application/json" \
+#     -H "x-agent-user-isolation-key: local-dev-user" \
+#     -H "x-agent-chat-isolation-key: local-dev-chat" \
+#     -d '{"input":"Suggest a one-day food crawl in Lisbon.","model":"trip-planner","stream":true}'
 POST {{host}}/responses
 Content-Type: application/json
 x-agent-user-isolation-key: {{userKey}}
