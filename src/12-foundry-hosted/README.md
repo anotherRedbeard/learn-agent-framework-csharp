@@ -189,6 +189,9 @@ preview uses an `azd ai agent init` → `azd up` flow:
 ```bash
 cd src/12-foundry-hosted
 
+# 0. Log azd in (separate from `az login` — azd keeps its own token cache)
+azd auth login
+
 # 1. Initialize an azd environment from this folder's manifest (first deploy only).
 #    This creates the .azure/ folder — `azd env set` will fail until this runs.
 azd ai agent init -m ./agent.manifest.yaml
