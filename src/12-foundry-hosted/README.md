@@ -184,37 +184,54 @@ Re-run the requests in `requests.http`. Same agent, now coming from a container.
 ## Step 4 — Deploy to Foundry
 
 Once the container runs cleanly locally, push it into Foundry. The refreshed
-preview uses an `azd ai agent init` → `azd up` flow:
+preview's `azd ai agent init` is designed to scaffold a brand-new project
+from an empty folder — it pulls the source down from a remote manifest URL
+and generates a full Bicep infrastructure layout (ACR, App Insights, etc.)
+that we deliberately don't keep in this learning repo. So we deploy from a
+**separate empty folder** that points at this module's committed manifest
+on GitHub:
 
 ```bash
-cd src/12-foundry-hosted
-
 # 0. Log azd in (separate from `az login` — azd keeps its own token cache)
 azd auth login
 
-# 1. Initialize an azd environment from this folder's manifest (first deploy only).
-#    This creates the .azure/ folder — `azd env set` will fail until this runs.
-azd ai agent init -m ./agent.manifest.yaml
+# 1. Create an empty deploy folder OUTSIDE this repo (anywhere you like)
+mkdir ~/trip-planner-deploy && cd ~/trip-planner-deploy
 
-# 2. Point the new azd environment at your Foundry project
+# 2. Scaffold the azd project from this module's manifest on GitHub.
+#    azd downloads Program.cs, Dockerfile, csproj, etc. as a snapshot
+#    next to a generated infra/ folder and azure.yaml.
+azd ai agent init \
+  -m https://raw.githubusercontent.com/anotherRedbeard/learn-agent-framework-csharp/main/src/12-foundry-hosted/agent.manifest.yaml
+
+# 3. (Optional) Target an existing Foundry project/model instead of
+#    letting azd provision new ones.
 azd env set AZURE_OPENAI_ENDPOINT \
   "https://<account>.services.ai.azure.com/api/projects/<project>"
 
-# 3. Build, push to the project's registry, register/update the hosted agent version
+# 4. Provision Azure resources + build + push image + register agent version
 azd up
 ```
 
-> 💡 **Order matters.** `azd env set` writes into an azd environment that only
-> exists after `azd ai agent init` (or `azd init`) has scaffolded a `.azure/`
-> folder. Running `azd env set` first gives you:
-> `ERROR: no project exists; to create a new project, run azd init`.
+> 💡 **Why a separate folder?** `azd ai agent init` v0.1.34-preview refuses
+> to scaffold into a directory that already contains source files (you'll
+> see `target ... is inside the manifest directory`). It's built for the
+> "start clean, pull a sample" workflow. Treating the deploy folder as a
+> disposable build context keeps this repo focused on the agent code and
+> off the generated Bicep.
 
-`azd ai agent init` reads `agent.manifest.yaml`, prompts for / reuses your
-Foundry project and model deployment, and writes an `azure.yaml` for `azd up`
-to use. `azd up` then builds the image, pushes it, and creates (or updates) the
-hosted agent version, assigning it a dedicated managed identity. Provisioning a
-new version typically takes 2–5 minutes; wait until the version status reads
-`active`.
+`azd up` builds the image, pushes it to the project's registry, and creates
+(or updates) the hosted agent version with its own dedicated managed
+identity. Provisioning a new version typically takes 2–5 minutes; wait
+until the version status reads `active`.
+
+> 🔁 **Iterating on code.** Edits you make in `src/12-foundry-hosted/` won't
+> deploy until they're pushed to `main` (since the deploy folder pulls from
+> the GitHub raw URL). For tighter loops, either:
+> - re-run `azd ai agent init` with `-m <path-to-local-manifest>` after
+>   committing locally, or
+> - copy your edited source into the deploy folder's `src/trip-planner/`
+>   and re-run `azd up` directly.
 
 Verify in [ai.azure.com](https://ai.azure.com) — open your project, go to
 **Agents**, and you should see `trip-planner` listed alongside Module 11's
