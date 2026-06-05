@@ -1,19 +1,15 @@
-### Module 12 — Foundry-hosted Responses agent
-# Hit this against either:
-#   - your local dotnet run / docker run  (set @host = http://localhost:8088)
-#   - the deployed Foundry agent endpoint (set @host = your project endpoint
-#     AND @path = the agent-scoped subpath; see the "cloud" examples at the
-#     bottom of this file)
+### Module 12 — Foundry-hosted Responses agent (local testing)
+# These requests hit the agent running locally via `dotnet run` (or `docker run`)
+# on http://localhost:8088. Running locally needs no auth — just POST to the
+# Responses endpoint.
+#
+# For testing the agent once it's DEPLOYED to Foundry, use the azd commands
+# instead of raw HTTP — they handle auth for you (no token minting required).
+# See the "Testing the deployed agent" note at the bottom of this file.
 
-@host = https://tripbot-foundry.services.ai.azure.com/api/projects/tripbot-project/agents/trip-planner/endpoint/protocols/openai
+@host = http://localhost:8088
 @path = /responses
 @agent = trip-planner
-@apiVersion = 2025-05-01
-
-# When @host points at the deployed Foundry endpoint, every request must
-# include `Authorization: Bearer {{token}}`. Mint a token (60-min lifetime):
-#   az account get-access-token --resource https://ai.azure.com --query accessToken -o tsv
-@token = eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiIsIng1dCI6IndoMDZzRWt6TEhKNXNOTmFVeVJZMl82TzhLMCIsImtpZCI6IndoMDZzRWt6TEhKNXNOTmFVeVJZMl82TzhLMCJ9.eyJhdWQiOiJodHRwczovL2FpLmF6dXJlLmNvbSIsImlzcyI6Imh0dHBzOi8vc3RzLndpbmRvd3MubmV0LzdmMmNhNTA4LWEwZmItNDI4Yi1iMjVlLWNkZmM0ZjVkYzU1Yi8iLCJpYXQiOjE3ODA2MDA2NTksIm5iZiI6MTc4MDYwMDY1OSwiZXhwIjoxNzgwNjA1MDI5LCJhY3IiOiIxIiwiYWlvIjoiQVlRQWUvOGNBQUFBVFdaNm4vL1RabjhOSmJITzM5eHRDQjBDd3pwYmNveHJ3cWkxS0pVZXZUUk1kRzRTUDFOSGVMdUQvd0ZJM1hIOHFpaWovUFY4T3c3b0VEbU5Pc3cxZlVGNlNQT3RQM0daYkNTZ0ZZdFphZ3h2WEgvR1JUYjdBNHJSTFFYbGJJSFJWNzluOXpWRWZXejhYckxsdUhvaUhxUU5NbGZuZTAvR2xLUnBINWNxREtVPSIsImFtciI6WyJwd2QiLCJtZmEiXSwiYXBwaWQiOiIwNGIwNzc5NS04ZGRiLTQ2MWEtYmJlZS0wMmY5ZTFiZjdiNDYiLCJhcHBpZGFjciI6IjAiLCJmYW1pbHlfbmFtZSI6IkFkbWluaXN0cmF0b3IiLCJnaXZlbl9uYW1lIjoiU3lzdGVtIiwiZ3JvdXBzIjpbImRjZTBmZmU2LTkwOTctNGY2OC1hMmM2LTBiODA5Y2UzYjM5NCJdLCJpZHR5cCI6InVzZXIiLCJpcGFkZHIiOiIyMC45Ny4xMC45OSIsIm5hbWUiOiJTeXN0ZW0gQWRtaW5pc3RyYXRvciIsIm9pZCI6ImUxNWYwYzc2LTI2NjUtNDU0NC1iN2UyLWU4OWRiYmExMzZjMiIsInB1aWQiOiIxMDAzMjAwMzlGMjRFMUMzIiwicmgiOiIxLkFiY0FDS1VzZl91Z2kwS3lYczM4VDEzRlcxOXZwaGpmMnhkTW5kY1dOSEVxbkw3OEFFaTNBQS4iLCJzY3AiOiJ1c2VyX2ltcGVyc29uYXRpb24iLCJzaWQiOiIwMDhkMDVhOS00NjRhLTBjNzctOGYzZC0wNzExZDY4NzExODAiLCJzdWIiOiJ3bEZUNzBpamhUUk94d1ZqZHN5VTd2ZDlEWDZwSU9yZGJGU2JnVjh1bk1JIiwidGlkIjoiN2YyY2E1MDgtYTBmYi00MjhiLWIyNWUtY2RmYzRmNWRjNTViIiwidW5pcXVlX25hbWUiOiJhZG1pbkBNbmdFbnZNQ0FQODExNjgzLm9ubWljcm9zb2Z0LmNvbSIsInVwbiI6ImFkbWluQE1uZ0Vudk1DQVA4MTE2ODMub25taWNyb3NvZnQuY29tIiwidXRpIjoiSjBlMFh1RXZsRXVNUk5hUkd4dExBQSIsInZlciI6IjEuMCIsInhtc19hY3RfZmN0IjoiMyA1IiwieG1zX2Z0ZCI6ImxuenMxTlpuNjFWeHVMMVJrQjlZVDlka2tEUjlxbnUwbkxDYnV5RVZMZk1CZFhOdWIzSjBhQzFrYzIxeiIsInhtc19pZHJlbCI6IjEgMiIsInhtc19zdWJfZmN0IjoiOCAzIn0.uSkSzp-zQjiz0WX9G5fqNMwhU1xZXqrqvGVUBYXoUcgIuYMpY6KGHa14yUq76xHXdUBN8SBd_R0nO-dk31Le34W9P18CasBkV41fOKrinl--NWKw8ls4Qw2CUS0jWp4P3FUCR7y7Avre0_AuLIH0ite-nxw9TCXMj6k_DAWgB11A4eNdC2P7sOH6GkxSc5FSBYN3ZWzjhFcg2FrkPHjlCzX1TEjOVQiqlyRq4fGlnknUQP2G2jLdtQWki__IHjQr2X-_clRxsJjOqvaaIopsxXjYXUl6S_UkAiIWMLFRugeL-kDQl_OKXaZPMv0YPPObcMuSmdv0vFnGsRuCYeTSvQ
 
 # Foundry's hosting layer scopes sessions by these two headers. In production
 # Foundry sets them per user/conversation; locally you pick any stable strings.
@@ -22,10 +18,9 @@
 @userKey = local-dev-user
 @chatKey = local-dev-chat
 
-### 1. Simple non-streaming request
+### 1. Simple request
 POST {{host}}{{path}}
 Content-Type: application/json
-Authorization: Bearer {{token}}
 x-agent-user-isolation-key: {{userKey}}
 x-agent-chat-isolation-key: {{chatKey}}
 
@@ -34,74 +29,34 @@ x-agent-chat-isolation-key: {{chatKey}}
   "model": "{{agent}}"
 }
 
-### 2. Streaming request
-# ⚠️ The VS Code REST Client does NOT render SSE incrementally. It buffers the
-# entire stream in memory and only displays it after the server closes the
-# connection — so for a long completion you'll stare at "running…" for 20-40s.
-# That's a UI limitation, not a hung server.
-#
-# To watch tokens actually arrive, run this in a terminal instead:
-#
-#   curl --no-buffer -X POST http://localhost:8088/responses \
-#     -H "Content-Type: application/json" \
-#     -H "x-agent-user-isolation-key: local-dev-user" \
-#     -H "x-agent-chat-isolation-key: local-dev-chat" \
-#     -d '{"input":"Suggest a one-day food crawl in Lisbon.","model":"trip-planner","stream":true}'
-POST {{host}}{{path}}
-Content-Type: application/json
-Authorization: Bearer {{token}}
-x-agent-user-isolation-key: {{userKey}}
-x-agent-chat-isolation-key: {{chatKey}}
-
-{
-  "input": "Suggest a one-day food crawl in Lisbon.",
-  "model": "{{agent}}",
-  "stream": true
-}
-
-### 3. Continue the conversation
+### 2. Continue the conversation
 # Pass the previous response.id in `previous_response_id` to keep the
 # server-side conversation state going (the Responses-protocol equivalent of
 # Module 10's `contextId`).
 POST {{host}}{{path}}
 Content-Type: application/json
-Authorization: Bearer {{token}}
 x-agent-user-isolation-key: {{userKey}}
 x-agent-chat-isolation-key: {{chatKey}}
 
 {
-  "input": "What about vegetarian options on that crawl?",
+  "input": "What about vegetarian options for that trip?",
   "model": "{{agent}}",
   "previous_response_id": "<paste id from a previous response here>"
 }
 
 ###############################################################################
-# Deployed-on-Foundry recipe
+# Testing the deployed agent
 #
-# When hitting the hosted agent, the URL shape is different from local. The
-# request goes to your *project endpoint*, not the agent's own hostname, and
-# the path is scoped under /agents/{name}/endpoint/protocols/openai/...
-# A `Foundry-Features: HostedAgents=V1Preview` header is REQUIRED during the
-# preview — without it you get HTTP 400 `preview_feature_required`.
+# Once the agent is deployed to Foundry, don't hand-craft HTTP requests — the
+# cloud endpoint requires an Entra token and a preview feature header. Use the
+# azd commands instead; they resolve the endpoint and auth automatically:
 #
-# To switch the requests above to cloud mode, override the variables:
-#   1) @host  → your project endpoint (NOT the agent hostname). Example:
-#               https://tripbot-foundry.services.ai.azure.com/api/projects/tripbot-project
-#   2) @path  → /agents/{{agent}}/endpoint/protocols/openai/responses?api-version={{apiVersion}}
-#   3) @token → az account get-access-token --resource https://ai.azure.com --query accessToken -o tsv
+#   # one-shot invoke (auto-detects the agent from azure.yaml)
+#   azd ai agent invoke "Plan a 3-day trip to Tokyo in cherry blossom season."
 #
-# Then also add `Foundry-Features: HostedAgents=V1Preview` to each request
-# header block (or use the standalone example below).
+#   # show agent details / current version / endpoint
+#   azd ai agent show
+#
+#   # stream live logs from the hosted agent
+#   azd ai agent monitor
 ###############################################################################
-
-### 4. Deployed agent — non-streaming
-# Set @host and @path to the cloud values described above before sending.
-POST {{host}}/agents/{{agent}}/endpoint/protocols/openai/responses?api-version={{apiVersion}}
-Content-Type: application/json
-Authorization: Bearer {{token}}
-Foundry-Features: HostedAgents=V1Preview
-
-{
-  "input": "Plan a 3-day trip to Tokyo in cherry blossom season.",
-  "model": "{{agent}}"
-}

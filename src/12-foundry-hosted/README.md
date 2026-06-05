@@ -111,17 +111,6 @@ The agent starts on `http://localhost:8088`. Open `requests.http` and send the
 first request. You should get back a JSON envelope shaped like the OpenAI
 Responses API.
 
-> ⚠️ **Don't run the streaming request from the VS Code REST Client.** The
-> agent's `/responses` endpoint with `"stream": true` returns Server-Sent
-> Events token-by-token, but the VS Code REST Client extension does **not**
-> render SSE incrementally — it buffers the entire stream in memory and only
-> displays anything after the server closes the connection. For a long
-> completion that means 20–40 seconds of "Waiting…" with no output, which
-> looks identical to a hung request. The server is fine; the client is the
-> bottleneck. To actually watch tokens arrive, use the `curl --no-buffer`
-> command provided in `requests.http` from a terminal instead. Stick to the
-> non-streaming requests when using the REST Client UI.
-
 > **Note on config sources.** Unlike most modules in this repo, Module 12 reads
 > from `Environment.GetEnvironmentVariable` directly (not `IConfiguration`)
 > because `AgentHost.CreateBuilder` is purpose-built for hosted-agent
@@ -378,9 +367,11 @@ az account get-access-token --resource https://ai.azure.com --query accessToken 
 ```
 
 The `Foundry-Features` header is mandatory — without it the endpoint returns
-HTTP 400 `preview_feature_required`. The SDK sets it automatically; raw REST
-clients (curl, VS Code REST Client) must add it themselves. See the "Deployed
-agent" example in `requests.http`.
+HTTP 400 `preview_feature_required`. The SDK and `azd ai agent invoke` set it
+automatically; raw REST clients (curl, VS Code REST Client) must add it
+themselves. For day-to-day testing of the deployed agent, prefer
+`azd ai agent invoke` / `azd ai agent show` — they handle auth and the header
+for you.
 
 ---
 
