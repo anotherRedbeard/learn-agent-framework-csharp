@@ -53,8 +53,9 @@ In addition to the [repo prerequisites](../../docs/prerequisites.md), you'll nee
   ```
   (Required by the refreshed-preview hosting backend — earlier `azd` versions
   call the retired hosting APIs.)
-- A container registry Foundry can pull from. `azd ai agent deploy` will create
-  one for you on first deploy if you don't have one.
+- A container registry Foundry can pull from. `azd up` will create one for you
+  on first deploy if you don't have one (or Foundry builds remotely when
+  `azure.yaml` sets `remoteBuild: true`).
 
 ---
 
@@ -135,49 +136,36 @@ Responses API.
 > payloads. If you rename the agent, change all three.
 
 > **Note on isolation keys.** Foundry's hosting layer scopes sessions by two
-> required headers: `x-agent-user-isolation-key` and `x-agent-chat-isolation-key`.
-> In production Foundry injects them per user/conversation; locally you pick
-> any stable strings. **Without these headers every request 500s** with
-> `HostedSessionIsolationKeyProvider returned null` in the server console.
-> `requests.http` already sets them via `@userKey` / `@chatKey` variables —
-> change `@chatKey` to start a fresh conversation. If you `curl` directly,
-> add `-H "x-agent-user-isolation-key: local-dev-user" -H "x-agent-chat-isolation-key: local-dev-chat"`.
+> headers: `x-agent-user-isolation-key` and `x-agent-chat-isolation-key`. In
+> production Foundry injects them per user/conversation. Locally,
+> `AgentHost.CreateBuilder` supplies a default session-isolation provider, so
+> **you don't need to send these headers** for a plain `dotnet run` — requests
+> succeed without them. `requests.http` still sets them via `@userKey` /
+> `@chatKey` (handy for simulating separate conversations — change `@chatKey`
+> to start a fresh one), but they're optional locally.
 
 ---
 
-## Step 3 — Run it as a container
+## Step 3 — Run it as a container (optional)
 
-Same agent, packaged the way Foundry will run it:
+> ℹ️ **Optional.** `azure.yaml` sets `remoteBuild: true`, so Foundry builds the
+> image for you at deploy time — you don't need a working local container to
+> ship. Use this step only if you want to validate the image build itself.
 
 ```bash
-# 1. Build the image
+# Build the image
 docker build -t trip-planner:local .
-
-# 2. Generate a short-lived Azure token to inject (managed identity is what
-#    Foundry uses in the cloud — locally we fake it with your az login token)
-export AZURE_BEARER_TOKEN=$(az account get-access-token \
-  --resource https://ai.azure.com --query accessToken -o tsv)
-
-# 3. Run
-cp .env.example .env   # then edit .env to fill in your endpoint
-docker run --rm -p 8088:8088 \
-  --env-file .env \
-  -e AZURE_BEARER_TOKEN=$AZURE_BEARER_TOKEN \
-  trip-planner:local
 ```
 
-Re-run the requests in `requests.http`. Same agent, now coming from a container.
-
-> **Why a bearer token?** `DefaultAzureCredential` inside the container has no
-> way to do `az login` — there's no Azure CLI, no managed identity endpoint, no
-> Visual Studio token cache. Foundry solves this in production by assigning the
-> hosted agent its own **managed identity**, which `DefaultAzureCredential`
-> picks up automatically. Locally we substitute a bearer token minted from your
-> already-authenticated host: `Program.cs` notices `AZURE_BEARER_TOKEN` is set
-> and uses a small `StaticTokenCredential` that hands it back verbatim, instead
-> of going through `DefaultAzureCredential`. Tokens from `az account
-> get-access-token` last ~60 minutes — re-export and re-run `docker run` if
-> your session lasts longer.
+> **Heads-up on local container auth.** `Program.cs` now uses
+> `DefaultAzureCredential` only (matching the canonical hello-world sample — the
+> old `AZURE_BEARER_TOKEN` / `StaticTokenCredential` shim was removed). A bare
+> `docker run` has no `az login`, no managed-identity endpoint, and no token
+> cache, so the agent can't authenticate to Foundry from inside the container.
+> In production Foundry assigns the hosted agent its own **managed identity**,
+> which `DefaultAzureCredential` picks up automatically. For local validation,
+> prefer `dotnet run` (Step 2) or `azd ai agent run`, which run under your
+> `az login` identity.
 
 ---
 
@@ -189,15 +177,10 @@ care of the runtime (scaling, ingress, auth, session isolation, observability)
 needs a Foundry project + container registry to publish to. `azd ai agent init`
 handles both.
 
-There are two flavors depending on whether you're starting fresh or reusing
-existing infra:
-
-### Flavor A — Reuse the Foundry project you already have (recommended for this repo)
-
-You set up `tripbot-project` back in Module 11. Pointing `-p` at it skips
-the greenfield Bicep (no new ACR, App Insights, AI Search — Foundry reuses
-what the project already has) and just wires `trip-planner` in as a new
-agent.
+You deploy into the Foundry project you already have (the `tripbot-project`
+you set up in Module 11). Pointing `azd ai agent init` at it with `-p` reuses
+the project's existing ACR, App Insights, and model deployment, and just wires
+`trip-planner` in as a new agent.
 
 ```bash
 cd src/12-foundry-hosted
@@ -222,25 +205,32 @@ azd ai agent init \
 azd up
 ```
 
+> **One-time setup — enable hosted agents on the project.** `azd up` doesn't
+> provision the **Agents capability host** that hosted agents require, so create
+> it once, at **both** account and project scope, before `azd up`:
+>
+> ```bash
+> SUB=<your-subscription-id>; RG=<your-rg>; ACC=tripbot-foundry; PROJ=tripbot-project
+> BODY='{"properties":{"capabilityHostKind":"Agents","enablePublicHostingEnvironment":true}}'
+> AV=2025-10-01-preview
+> # account scope
+> az rest --method put \
+>   --url "https://management.azure.com/subscriptions/$SUB/resourceGroups/$RG/providers/Microsoft.CognitiveServices/accounts/$ACC/capabilityHosts/agents?api-version=$AV" \
+>   --body "$BODY"
+> # project scope
+> az rest --method put \
+>   --url "https://management.azure.com/subscriptions/$SUB/resourceGroups/$RG/providers/Microsoft.CognitiveServices/accounts/$ACC/projects/$PROJ/capabilityHosts/agents?api-version=$AV" \
+>   --body "$BODY"
+> ```
+>
+> Poll the same URLs with `az rest --method get` until each reports
+> `provisioningState: Succeeded`, then run `azd up`.
+
 The generated `azure.yaml`, `infra/`, and `.azure/` folders are git-ignored
 at the repo root — they're per-developer build state, not part of the
 learning material.
 
-### Flavor B — Greenfield (let azd provision everything)
-
-If you don't have a Foundry project yet, drop the `-p`/`-d` flags. `azd up`
-will then provision a brand-new project, container registry, App Insights,
-and model deployment from the Bicep that `init` scaffolded. Useful for a
-clean demo environment; overkill if you already have Module 11's project.
-
-```bash
-cd src/12-foundry-hosted
-azd auth login
-azd ai agent init -m ./agent.manifest.yaml --src . --force --agent-name trip-planner
-azd up
-```
-
-### Flavor C — Pure REST (CI/CD pipelines)
+### Alternative — Pure REST (CI/CD pipelines)
 
 For production CI/CD where you don't want to depend on `azd`, you can build
 and push the image yourself and register the agent version via the Foundry
@@ -256,7 +246,7 @@ docker push $ACR/trip-planner:v1
 # 2. Register a new agent version (or create the agent if it doesn't exist)
 TOKEN=$(az account get-access-token --resource https://ai.azure.com --query accessToken -o tsv)
 az rest --method POST \
-  --uri "$PROJECT_ENDPOINT/agents/trip-planner/versions?api-version=v1" \
+  --uri "$PROJECT_ENDPOINT/agents/trip-planner/versions?api-version=2025-11-15-preview" \
   --headers "Authorization=Bearer $TOKEN" \
             "Foundry-Features=HostedAgents=V1Preview" \
             "Content-Type=application/json" \
@@ -264,19 +254,31 @@ az rest --method POST \
     "definition": {
       "kind": "hosted",
       "image": "'$ACR'/trip-planner:v1",
-      "protocols": ["responses"],
-      "resources": { "cpu": 1, "memory": "2Gi" },
-      "environment_variables": [
-        { "name": "AZURE_OPENAI_DEPLOYMENT_NAME", "value": "gpt-4o-mini" }
-      ]
+      "container_protocol_versions": [
+        { "protocol": "responses", "version": "1.0.0" }
+      ],
+      "cpu": "0.5",
+      "memory": "1Gi",
+      "environment_variables": {
+        "AZURE_OPENAI_DEPLOYMENT_NAME": "gpt-4o-mini"
+      }
     }
   }'
 ```
 
-> **Heads up:** Flavor C does **not** create an Agent Entra Identity or assign
-> any RBAC. You must do both manually after the first POST (see the RBAC
-> section below). Flavors A and B do create the identity for you — but per
-> the next section, they may still skip the role assignment silently.
+> **Note:** the refreshed-preview management schema evolves quickly. The body
+> above mirrors what the SDK emits (`container_protocol_versions`, string `cpu`,
+> map-shaped `environment_variables`); confirm the current shape against a
+> known-good version with
+> `az rest --method get --uri "$PROJECT_ENDPOINT/agents/trip-planner/versions/<n>?api-version=2025-11-15-preview"`.
+> The REST path also requires the **Agents capability host** on the target
+> project (see the one-time setup above). Prefer `azd` (the steps above) for
+> anything but CI/CD.
+
+> **Heads up:** the REST path does **not** create an Agent Entra Identity or
+> assign any RBAC. You must do both manually after the first POST (see the RBAC
+> section below). The `azd` path creates the identity for you — but per
+> the next section, it may still skip the role assignment silently.
 
 ---
 
@@ -285,20 +287,33 @@ az rest --method POST \
 Identity**. Provisioning a new version typically takes 2–5 minutes; wait
 until the version status reads `active`.
 
-Verify in [ai.azure.com](https://ai.azure.com) — open your project, go to
+Check status from the CLI without leaving your terminal:
+
+```bash
+azd ai agent show            # version status (creating → active → failed)
+azd ai agent monitor         # stream live container logs
+```
+
+Or verify in [ai.azure.com](https://ai.azure.com) — open your project, go to
 **Agents**, and you should see `trip-planner` listed alongside Module 11's
 Prompt Agent. Click it to see its endpoint URL, container image, and live logs.
 
 ### Identity & RBAC — do this *before* calling the agent
 
-> ⚠️ **Read this section even if `azd up` succeeded.** As of `azd ai agent`
-> extension version 0.1.25, RBAC assignment failures during `azd up` are
+> ⚠️ **Read this section even if `azd up` succeeded.** In current `azd ai agent`
+> extension previews, RBAC assignment failures during `azd up` are surfaced as
 > **warnings, not errors** — the deploy reports success even if the agent's
 > identity ends up with no role on the Foundry account. The most common
 > symptom is the **playground returning HTTP 500** with a
 > `ManagedIdentityCredential` failure inside `FoundryStorageProvider` (the
 > hosted runtime's own session storage). The fix is always: assign **Foundry
 > User** to the agent identity at **account scope**.
+>
+> **Deployer role:** to *create/deploy* a hosted agent you (the human running
+> `azd up`) need **Foundry Project Manager** at the project scope. **Role
+> rename:** Foundry User / Foundry Project Manager were formerly named *Azure
+> AI User* / *Azure AI Project Manager* — you may still see the old names in the
+> portal. The role IDs and permissions are unchanged.
 
 Each hosted agent has its own **Agent Entra Identity** (visible in the
 Foundry portal at the agent level — _not_ the same as the project's
@@ -335,12 +350,20 @@ provisions the identity but does not wire downstream RBAC for you.
 
 ### Calling the deployed agent
 
-The deployed endpoint is **not** `https://{agent-host}/responses` like the
-local server. It's scoped under your project endpoint with an agent subpath,
-and the refreshed preview requires a feature header:
+The simplest way to call the deployed agent is the CLI — it auto-detects the
+agent from `azure.yaml`, mints the token, sets the preview header, and targets
+the dedicated agent endpoint for you:
+
+```bash
+azd ai agent invoke "Plan a 3-day trip to Tokyo."
+```
+
+Under the hood the deployed endpoint is **not** `https://{agent-host}/responses`
+like the local server. It's scoped under your project endpoint with an agent
+subpath, and the refreshed preview requires a feature header:
 
 ```http
-POST {project_endpoint}/agents/trip-planner/endpoint/protocols/openai/responses?api-version=2025-05-01
+POST {project_endpoint}/agents/trip-planner/endpoint/protocols/openai/responses?api-version=2025-11-15-preview
 Authorization: Bearer <token>
 Foundry-Features: HostedAgents=V1Preview        # ← required during preview
 Content-Type: application/json
@@ -447,8 +470,11 @@ dotnet run                          # fails — fill in the TODOs
   which is why Module 10's endpoint can't be lifted directly.
 - `template.resources.cpu` / `template.resources.memory` — container sizing
 - `template.environment_variables` — what platform values get exposed into the
-  container (we map `FOUNDRY_PROJECT_ENDPOINT` → `AZURE_OPENAI_ENDPOINT` so the
-  code matches the rest of the repo)
+  container. Here we template only the model deployment name
+  (`AZURE_OPENAI_DEPLOYMENT_NAME`); Foundry **auto-injects**
+  `FOUNDRY_PROJECT_ENDPOINT` (and `APPLICATIONINSIGHTS_CONNECTION_STRING`), so
+  those are *not* declared here. `Program.cs` reads `FOUNDRY_PROJECT_ENDPOINT`
+  and normalizes it to the account host.
 - Top-level `resources:` — declares downstream Azure resources (here: the
   model deployment). `azd ai agent init` uses this to wire up / provision them.
 
@@ -466,11 +492,6 @@ fan out to tools).
 
 ❌ **Hardcoding the agent name.** Always read `AGENT_NAME` from the environment
 so the platform can stage versions or rename without code changes.
-
-❌ **Skipping the local container loop.** `dotnet run` validates your agent
-logic; only `docker run` validates that your image actually starts under a
-managed-identity-style credential. Skipping it pushes failures into Foundry,
-where they cost minutes per round-trip.
 
 ❌ **Deploying every code change as a new agent.** Re-run `azd up` against the
 same manifest to push new **versions** of the same agent — clients keep their

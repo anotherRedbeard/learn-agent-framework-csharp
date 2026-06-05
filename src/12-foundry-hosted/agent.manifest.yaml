@@ -1,8 +1,9 @@
 # yaml-language-server: $schema=https://raw.githubusercontent.com/microsoft/AgentSchema/refs/heads/main/schemas/v1.0/AgentManifest.yaml
 #
 # Foundry agent manifest (refreshed public preview schema).
-# `azd ai agent deploy` reads this file to build the image, push it to your
-# Foundry project's container registry, and register the hosted agent version.
+# `azd ai agent init` reads this file to scaffold azure.yaml + infra/; the
+# subsequent `azd up` builds the image, pushes it to your Foundry project's
+# container registry, and registers the hosted agent version.
 # The `template.name` here MUST match the AGENT_NAME the running container sees.
 name: trip-planner
 displayName: "Trip Planner"
