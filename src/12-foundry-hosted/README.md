@@ -236,8 +236,9 @@ leave you to wire up by hand.
 
 The same script runs in GitHub Actions via
 [`.github/workflows/deploy-hosted-agent.yml`](../../.github/workflows/deploy-hosted-agent.yml)
-(OIDC login, `workflow_dispatch`). See [`cicd/README.md`](cicd/README.md) for
-prerequisites, RBAC, and the model/region parameters.
+(OIDC login, `workflow_dispatch`). See [`cicd/README.md`](cicd/README.md) for a
+step-by-step **test-from-scratch** walkthrough (sign in → deploy → verify →
+iterate → tear down), prerequisites, RBAC, and the model/region parameters.
 
 Unlike a hand-rolled `az rest` POST, this path does **not** leave the identity
 or role assignments for you to fix up afterward — the Bicep grants AcrPull and

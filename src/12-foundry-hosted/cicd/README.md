@@ -34,15 +34,68 @@ Two RBAC grants matter and are handled for you:
 > No explicit `capabilityHost` resource is needed — the hosted-agent runtime is
 > provisioned automatically by the account API version used here.
 
-## Run it locally
+## Run it locally (test from scratch)
 
-Prerequisites: `az` (logged in via `az login`), `git`, `curl`, `python3`. You do
-**not** need Docker — `az acr build` builds the image in Azure.
+Prerequisites: `az` (logged in), `git`, `curl`, `python3`. You do **not** need
+Docker — `az acr build` builds the image in Azure. Your account needs **Owner**
+(or **Contributor + Role Based Access Control Administrator**) at the
+subscription scope, because the Bicep creates a resource group *and* role
+assignments.
+
+**1. Sign in and select the subscription**
 
 ```bash
-# from src/12-foundry-hosted
-./cicd/deploy.sh
+az login
+az account set --subscription <your-subscription-id>
+az account show --query "{sub:name, user:user.name}" -o table
 ```
+
+**2. Deploy**
+
+```bash
+cd src/12-foundry-hosted
+
+# A fresh ENVIRONMENT_NAME keeps these resources separate from any existing
+# tripbot project. It creates resource group rg-<ENVIRONMENT_NAME>.
+ENVIRONMENT_NAME=tripbot-cicd LOCATION=eastus2 ./cicd/deploy.sh
+```
+
+In order, this: deploys infra (Foundry account + project + model + ACR + App
+Insights) → grants you **Foundry Project Manager** on the project (+120s
+propagation wait) → builds/pushes the image with `az acr build` → registers the
+`trip-planner` agent version → polls until `active`. The first run takes
+~5–10 min; it prints the project endpoint and an invoke URL when done.
+
+**3. Verify it works**
+
+```bash
+PROJECT_ENDPOINT="<printed by the script>"   # https://<acct>.services.ai.azure.com/api/projects/trip-project
+TOKEN=$(az account get-access-token --resource https://ai.azure.com/ --query accessToken -o tsv)
+
+curl -sS -X POST \
+  "$PROJECT_ENDPOINT/agents/trip-planner/endpoint/protocols/openai/responses?api-version=2025-11-15-preview" \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"input":"Plan a 3-day trip to Tokyo in cherry blossom season.","store":true}'
+```
+
+Or open the [Foundry portal](https://ai.azure.com/), select project
+`trip-project`, and test `trip-planner` under **Agents**.
+
+**4. Iterate on a code change (fast inner loop)**
+
+Re-register a new version without re-running the Bicep:
+
+```bash
+ENVIRONMENT_NAME=tripbot-cicd LOCATION=eastus2 ./cicd/deploy.sh --skip-infra
+```
+
+**5. Tear down when finished**
+
+```bash
+az group delete -n rg-tripbot-cicd --yes --no-wait
+```
+
+### Options
 
 Override the defaults with env vars:
 
@@ -56,10 +109,6 @@ Useful flags:
   new agent version (fast inner loop after a code change).
 - `--skip-rbac` — skip the Foundry Project Manager grant + 120s propagation wait
   (use when you already have the role on the project).
-
-Your account needs **Owner** (or **Contributor + Role Based Access Control
-Administrator**) at the subscription scope, because the Bicep creates a resource
-group and role assignments.
 
 Edit the model / region / project name defaults in
 [`infra/main.parameters.json`](infra/main.parameters.json).
