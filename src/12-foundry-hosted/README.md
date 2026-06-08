@@ -165,7 +165,14 @@ project, a container registry to publish to, and the right RBAC.
 Most enterprises ship that with **infrastructure-as-code + a REST call from a
 pipeline**, not an interactive CLI — so that's the path this module teaches. The
 [`cicd/`](cicd) folder packages it as a single script,
-[`deploy.sh`](cicd/deploy.sh), that:
+[`deploy.sh`](cicd/deploy.sh).
+
+> 🧭 **How to read this step.** Lines marked **▶️ Do** are commands you run or
+> actions you take. Lines marked **✅ Verify** are checks to confirm the step
+> worked before moving on. Everything else is background context.
+
+**Background — what `deploy.sh` does for you** (you don't run these individually;
+the script orchestrates them):
 
 1. provisions a complete **standalone** stack with **Bicep** — Foundry account +
    project, the `gpt-4o-mini` deployment, an ACR with a ManagedIdentity
@@ -190,33 +197,56 @@ pipeline**, not an interactive CLI — so that's the path this module teaches. T
 > It reuses the base account (redeployed on the `2026-03-01` API) and adds only
 > an ACR + the project's image-pull/model RBAC.
 
+#### 4a. Sign in and select your subscription
+
+**▶️ Do** — sign in and pick the subscription the stack should land in:
+
 ```bash
-# 1. Sign in and pick the subscription the stack should land in
 az login
 az account set --subscription <your-subscription-id>
+```
 
-# 2. Deploy. A fresh ENVIRONMENT_NAME keeps these resources in their own
-#    resource group (rg-<ENVIRONMENT_NAME>), separate from Modules 1–11.
+**✅ Verify** — the correct subscription is active:
+
+```bash
+az account show --query "{name:name, id:id}" -o table
+```
+
+#### 4b. Run the deploy script
+
+**▶️ Do** — deploy the stack. A fresh `ENVIRONMENT_NAME` keeps these resources in
+their own resource group (`rg-<ENVIRONMENT_NAME>`), separate from Modules 1–11:
+
+```bash
 cd src/12-foundry-hosted
 ENVIRONMENT_NAME=tripbot-cicd LOCATION=eastus2 ./cicd/deploy.sh
 ```
 
-Your account needs **Owner** (or **Contributor + Role Based Access Control
-Administrator**) at the subscription scope, because the script creates a
-resource group *and* role assignments. The first run takes ~5–10 minutes; when
-it finishes it prints the project endpoint and the REST invoke URL.
+> **Heads-up — permissions & timing.** Your account needs **Owner** (or
+> **Contributor + Role Based Access Control Administrator**) at the subscription
+> scope, because the script creates a resource group *and* role assignments. The
+> first run takes ~5–10 minutes.
 
-After a code change, re-register a new version without re-running the Bicep:
+**✅ Verify** — when the script finishes it prints the **project endpoint** and
+the **REST invoke URL**, and the agent version reports `active`. Copy both
+printed values — you'll use them in [Calling the deployed agent](#calling-the-deployed-agent).
+
+#### 4c. Redeploy after a code change (optional)
+
+**▶️ Do** — re-register a new version without re-running the Bicep:
 
 ```bash
 ENVIRONMENT_NAME=tripbot-cicd LOCATION=eastus2 ./cicd/deploy.sh --skip-infra
 ```
 
-The same script runs unchanged in **GitHub Actions** via
-[`.github/workflows/deploy-hosted-agent.yml`](../../.github/workflows/deploy-hosted-agent.yml)
-(OIDC login, `workflow_dispatch`). See [`cicd/README.md`](cicd/README.md) for the
-resource breakdown, the CI/OIDC setup, the deploy flags and model/region
-parameters, and image-pull troubleshooting.
+**✅ Verify** — the script reports a **new version** for `trip-planner` and polls
+it to `active`. The previous version stays addressable until the new one rolls out.
+
+> ℹ️ **Same script in CI.** It runs unchanged in **GitHub Actions** via
+> [`.github/workflows/deploy-hosted-agent.yml`](../../.github/workflows/deploy-hosted-agent.yml)
+> (OIDC login, `workflow_dispatch`). See [`cicd/README.md`](cicd/README.md) for
+> the resource breakdown, the CI/OIDC setup, the deploy flags and model/region
+> parameters, and image-pull troubleshooting.
 
 ### Identity & RBAC — handled for you
 
@@ -250,7 +280,9 @@ on your own.
 
 The deployed endpoint is **not** `https://{agent-host}/responses` like the local
 server. It's scoped under your project endpoint with an agent subpath, and the
-refreshed preview requires a feature header:
+refreshed preview requires a feature header.
+
+**▶️ Do** — invoke the agent (use the `PROJECT_ENDPOINT` printed by `deploy.sh`):
 
 ```bash
 # Both values are printed at the end of deploy.sh
@@ -265,11 +297,14 @@ curl -sS -X POST \
   -d '{"input":"Plan a 3-day trip to Tokyo.","model":"trip-planner","store":true}'
 ```
 
-The `Foundry-Features: HostedAgents=V1Preview` header is mandatory during preview
-— without it the endpoint returns HTTP 400 `preview_feature_required`. Or skip
-curl entirely and test in [ai.azure.com](https://ai.azure.com): open your
-project, go to **Agents**, and you'll see `trip-planner` — click it to chat and
-to see its endpoint URL, container image, and live logs.
+**✅ Verify** — you get back a JSON Responses envelope containing a Tokyo itinerary.
+
+> ⚠️ **The `Foundry-Features: HostedAgents=V1Preview` header is mandatory during
+> preview** — without it the endpoint returns HTTP 400 `preview_feature_required`.
+
+**▶️ Do (alternative) — test in the portal** instead of curl: open
+[ai.azure.com](https://ai.azure.com), go to your project → **Agents**, click
+`trip-planner` to chat and to see its endpoint URL, container image, and live logs.
 
 ### Gotcha on your first invoke — provisioning lag
 
