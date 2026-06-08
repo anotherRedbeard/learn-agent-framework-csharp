@@ -31,5 +31,8 @@ Thumbs.db
 .azure/
 azure.yaml
 infra/
+# but keep the hand-authored CI/CD Bicep that lives under a cicd/ folder
+!**/cicd/infra/
+!**/cicd/infra/**
 agent.yaml
 .agentignore

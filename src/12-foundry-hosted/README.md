@@ -219,55 +219,30 @@ The generated `azure.yaml`, `infra/`, and `.azure/` folders are git-ignored
 at the repo root — they're per-developer build state, not part of the
 learning material.
 
-### Alternative — Pure REST (CI/CD pipelines)
+### Alternative — Bicep + REST (CI/CD pipelines, no `azd`)
 
-For production CI/CD where you don't want to depend on `azd`, you can build
-and push the image yourself and register the agent version via the Foundry
-REST API. This is the path automation pipelines should take.
+For production CI/CD where you don't want to depend on `azd`, the
+[`cicd/`](cicd) folder provisions a complete **standalone** stack with **Bicep**
+(Foundry account + project + model deployment, ACR + ManagedIdentity connection,
+and Log Analytics + Application Insights) and registers the agent via the
+Foundry **REST API** — including all the RBAC the bare REST call would otherwise
+leave you to wire up by hand.
 
 ```bash
-# 1. Build & push to your ACR (any ACR Foundry can pull from)
-ACR=myregistry.azurecr.io
-docker build --platform linux/amd64 -t $ACR/trip-planner:v1 .
-az acr login --name myregistry
-docker push $ACR/trip-planner:v1
-
-# 2. Register a new agent version (or create the agent if it doesn't exist)
-TOKEN=$(az account get-access-token --resource https://ai.azure.com --query accessToken -o tsv)
-az rest --method POST \
-  --uri "$PROJECT_ENDPOINT/agents/trip-planner/versions?api-version=2025-11-15-preview" \
-  --headers "Authorization=Bearer $TOKEN" \
-            "Foundry-Features=HostedAgents=V1Preview" \
-            "Content-Type=application/json" \
-  --body '{
-    "definition": {
-      "kind": "hosted",
-      "image": "'$ACR'/trip-planner:v1",
-      "container_protocol_versions": [
-        { "protocol": "responses", "version": "1.0.0" }
-      ],
-      "cpu": "0.5",
-      "memory": "1Gi",
-      "environment_variables": {
-        "AZURE_OPENAI_DEPLOYMENT_NAME": "gpt-4o-mini"
-      }
-    }
-  }'
+# from src/12-foundry-hosted — provisions infra, builds the image with
+# az acr build (no Docker), registers the agent version, polls until active
+./cicd/deploy.sh
 ```
 
-> **Note:** the refreshed-preview management schema evolves quickly. The body
-> above mirrors what the SDK emits (`container_protocol_versions`, string `cpu`,
-> map-shaped `environment_variables`); confirm the current shape against a
-> known-good version with
-> `az rest --method get --uri "$PROJECT_ENDPOINT/agents/trip-planner/versions/<n>?api-version=2025-11-15-preview"`.
-> The REST path also requires the **Agents capability host** on the target
-> project (see the one-time setup above). Prefer `azd` (the steps above) for
-> anything but CI/CD.
+The same script runs in GitHub Actions via
+[`.github/workflows/deploy-hosted-agent.yml`](../../.github/workflows/deploy-hosted-agent.yml)
+(OIDC login, `workflow_dispatch`). See [`cicd/README.md`](cicd/README.md) for
+prerequisites, RBAC, and the model/region parameters.
 
-> **Heads up:** the REST path does **not** create an Agent Entra Identity or
-> assign any RBAC. You must do both manually after the first POST (see the RBAC
-> section below). The `azd` path creates the identity for you — but per
-> the next section, it may still skip the role assignment silently.
+Unlike a hand-rolled `az rest` POST, this path does **not** leave the identity
+or role assignments for you to fix up afterward — the Bicep grants AcrPull and
+Foundry User to the project identity, and `deploy.sh` grants you Foundry
+Project Manager at the project scope so the version-create call succeeds.
 
 ---
 

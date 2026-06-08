@@ -21,6 +21,7 @@ The framework abstracts away which LLM provider you use — swap from Azure Open
 
 1. Follow [docs/prerequisites.md](docs/prerequisites.md) for full setup instructions
 2. Deploy Azure resources: `az deployment group create --template-file infra/main.bicep --parameters infra/main.bicepparam --parameters principalId=$(az ad signed-in-user show --query id -o tsv)`
+   - This also provisions Application Insights (+ Log Analytics) connected to the project and outputs `applicationInsightsConnectionString` — set it as `APPLICATIONINSIGHTS_CONNECTION_STRING` to export traces from any module. Pass `--parameters enableObservability=false` to skip it.
 3. Once your credentials are configured → **[Start here: src/README.md](src/README.md)**
 
 **Quick checklist:**

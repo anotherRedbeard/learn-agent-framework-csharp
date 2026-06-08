@@ -1,0 +1,68 @@
+name: Deploy Hosted Agent (Module 12)
+
+# Deploys the Module 12 Foundry hosted agent to Azure WITHOUT azd:
+#   Bicep infra  ->  az acr build  ->  Foundry data-plane version register  ->  poll active.
+#
+# This is the same flow as cicd/deploy.sh — the workflow just runs that script
+# after an OIDC Azure login, so there is a single source of truth for the logic.
+#
+# Required repository secrets (federated / OIDC — no client secret):
+#   AZURE_CLIENT_ID        App registration (federated credential) client id
+#   AZURE_TENANT_ID        Entra tenant id
+#   AZURE_SUBSCRIPTION_ID  Target subscription id
+#
+# Optional repository secret (recommended — avoids a Microsoft Graph read):
+#   AZURE_CLIENT_OBJECT_ID  Object id of the deploying service principal. When
+#                           set, the script grants Foundry Project Manager to
+#                           this object id directly instead of looking it up.
+#
+# The federated identity needs Owner (or Contributor + Role Based Access
+# Control Administrator) at the subscription scope, because the Bicep creates a
+# resource group and role assignments.
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment_name:
+        description: Environment name (drives resource naming, e.g. rg-<name>)
+        required: true
+        default: tripbot-cicd
+        type: string
+      location:
+        description: Azure region
+        required: true
+        default: eastus2
+        type: string
+      agent_name:
+        description: Foundry hosted agent name
+        required: true
+        default: trip-planner
+        type: string
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy hosted agent
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy infra + register agent
+        working-directory: src/12-foundry-hosted
+        env:
+          ENVIRONMENT_NAME: ${{ inputs.environment_name }}
+          LOCATION: ${{ inputs.location }}
+          AGENT_NAME: ${{ inputs.agent_name }}
+          DEPLOYER_OBJECT_ID: ${{ secrets.AZURE_CLIENT_OBJECT_ID }}
+        run: bash ./cicd/deploy.sh

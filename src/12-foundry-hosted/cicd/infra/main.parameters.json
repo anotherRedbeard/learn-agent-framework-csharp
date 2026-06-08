@@ -1,0 +1,34 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "environmentName": {
+      "value": "tripbot-cicd"
+    },
+    "location": {
+      "value": "eastus2"
+    },
+    "aiDeploymentsLocation": {
+      "value": "eastus2"
+    },
+    "aiFoundryProjectName": {
+      "value": "trip-project"
+    },
+    "deployments": {
+      "value": [
+        {
+          "name": "gpt-4o-mini",
+          "model": {
+            "format": "OpenAI",
+            "name": "gpt-4o-mini",
+            "version": "2024-07-18"
+          },
+          "sku": {
+            "name": "GlobalStandard",
+            "capacity": 10
+          }
+        }
+      ]
+    }
+  }
+}

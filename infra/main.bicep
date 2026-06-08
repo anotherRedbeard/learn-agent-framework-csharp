@@ -6,6 +6,8 @@
 //   2. AI Project (child resource)
 //   3. gpt-4o-mini model deployment
 //   4. Foundry User role assignment
+//   5. (optional) Log Analytics + Application Insights wired into the project,
+//      so any module can demonstrate observability / tracing
 //
 // API version 2025-06-01 required for allowProjectManagement and projects support.
 // Reference: https://github.com/anotherRedbeard/agentic-learning/tree/main/infra/ai-foundry
@@ -40,6 +42,9 @@ Get your own ID with:  az ad signed-in-user show --query id -o tsv
 Leave empty to skip role assignment (you can add it manually later).
 ''')
 param principalId string = ''
+
+@description('Deploy Application Insights + Log Analytics and wire them into the project so any module can demonstrate observability / tracing. Set false to keep the base minimal.')
+param enableObservability bool = true
 
 // ── Azure Foundry Account ──────────────────────────────────────────────────────
 // AIServices account with allowProjectManagement: true enables project creation
@@ -112,6 +117,65 @@ resource roleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = i
   }
 }
 
+// ── Observability (optional) ───────────────────────────────────────────────────
+// Log Analytics + Application Insights, connected to the project. A module can
+// send traces by reading APPLICATIONINSIGHTS_CONNECTION_STRING (output below);
+// the project connection makes those traces visible in the Foundry portal.
+resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2025-07-01' = if (enableObservability) {
+  name: '${name}-logs'
+  location: location
+  properties: {
+    retentionInDays: 30
+    sku: {
+      name: 'PerGB2018'
+    }
+  }
+}
+
+resource appInsights 'Microsoft.Insights/components@2020-02-02' = if (enableObservability) {
+  name: '${name}-appi'
+  location: location
+  kind: 'web'
+  properties: {
+    Application_Type: 'web'
+    WorkspaceResourceId: logAnalytics.id
+  }
+}
+
+// Project connection to App Insights. authType 'ApiKey' with the connection
+// string is the form the Foundry portal supports for this category.
+resource appInsightsConnection 'Microsoft.CognitiveServices/accounts/projects/connections@2025-04-01-preview' = if (enableObservability) {
+  parent: foundryProject
+  name: '${name}-appi-connection'
+  properties: {
+    category: 'AppInsights'
+    target: appInsights.id
+    authType: 'ApiKey'
+    isSharedToAll: true
+    credentials: {
+      key: appInsights!.properties.ConnectionString
+    }
+    metadata: {
+      ApiType: 'Azure'
+      ResourceId: appInsights.id
+    }
+  }
+}
+
+// Log Analytics Reader for the project managed identity — lets evaluations in
+// the portal read agent traces stored in the workspace.
+var logAnalyticsReaderRoleId = '73c42c96-874c-492b-b04d-ab87d138a893'
+
+resource logAnalyticsReaderAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (enableObservability) {
+  scope: logAnalytics
+  name: guid(logAnalytics.id, foundryProject.id, logAnalyticsReaderRoleId)
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', logAnalyticsReaderRoleId)
+    principalId: foundryProject.identity.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
 // ── Outputs ────────────────────────────────────────────────────────────────────
 // These are the two values you need for dotnet user-secrets.
 // See docs/prerequisites.md for how to set them.
@@ -124,3 +188,6 @@ output azureOpenaiDeploymentName string = modelDeployment.name
 
 @description('The project will be visible at https://ai.azure.com under this name.')
 output projectName string = foundryProject.name
+
+@description('Set this as APPLICATIONINSIGHTS_CONNECTION_STRING to export traces from any module (empty when observability is disabled).')
+output applicationInsightsConnectionString string = enableObservability ? appInsights!.properties.ConnectionString : ''
