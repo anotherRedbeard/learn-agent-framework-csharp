@@ -373,6 +373,42 @@ themselves. For day-to-day testing of the deployed agent, prefer
 `azd ai agent invoke` / `azd ai agent show` — they handle auth and the header
 for you.
 
+### Two gotchas on your first invoke
+
+**1. "Subdomain does not map to a resource" right after deploy.** The *first*
+hosted agent you deploy triggers Foundry to provision the managed runtime
+behind the scenes. The agent version flips to `active` (visible in
+`azd ai agent show`) several minutes *before* its endpoint is actually
+reachable, so an early `azd ai agent invoke` can return
+`HTTP 404 "Subdomain does not map to a resource"`. This is normal first-deploy
+timing — wait a few minutes and retry. Subsequent deploys don't have this lag.
+
+**2. "Conversation '<id>' not found" on every retry.** `azd ai agent invoke`
+caches the conversation **per agent version** (in `~/.azd/config.json`). If your
+*first* call failed before the runtime created that conversation (e.g. you hit
+gotcha #1 above), every later call keeps replaying the same dead conversation ID
+and fails with `HTTP 404 "Conversation '<id>' not found"` — even though the
+agent is now healthy.
+
+First try a fresh session:
+
+```bash
+azd ai agent invoke --new-session "Plan a 3-day trip to Tokyo."
+```
+
+`--new-session` resets the *session* but **not** the cached *conversation*, so
+if you still see "Conversation not found", clear the cached conversation and
+session state, then invoke again:
+
+```bash
+azd config unset extensions.ai-agents.conversations
+azd config unset extensions.ai-agents.sessions
+azd ai agent invoke "Plan a 3-day trip to Tokyo."
+```
+
+This only clears azd's local chat cache (it starts fresh conversations next
+time) — it does not touch your deployed agent or any Azure resource.
+
 ---
 
 ## Step 5 — Your turn 🛠️
