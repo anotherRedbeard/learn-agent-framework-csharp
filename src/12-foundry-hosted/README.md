@@ -19,7 +19,7 @@ you and clients call it through the OpenAI **Responses protocol**.
 - What `agent.manifest.yaml` declares (`template.kind`, `protocols`, `resources`,
   `environment_variables`) and how Foundry uses it to provision the platform
   agent version
-- The full local-loop: `dotnet run` → `docker run` → `azd up`
+- The full local-loop: `dotnet run` → `docker run` → `./cicd/deploy.sh`
 
 ## When to use this pattern
 
@@ -42,20 +42,18 @@ process, the transport, or you have an existing A2A client ecosystem.
 
 In addition to the [repo prerequisites](../../docs/prerequisites.md), you'll need:
 
-- **Docker** (or Podman) for the local container loop
-- An **Azure AI Foundry project** with a deployed chat model (`gpt-4o-mini`
-  works well) — same project you used for Module 11 is fine
-- **Azure CLI** logged in: `az login`
-- **Azure Developer CLI** ≥ **1.23.0** with the Foundry agents extension installed:
-  ```bash
-  azd version           # confirm ≥ 1.23.0
-  azd ext install azure.ai.agents
-  ```
-  (Required by the refreshed-preview hosting backend — earlier `azd` versions
-  call the retired hosting APIs.)
-- A container registry Foundry can pull from. `azd up` will create one for you
-  on first deploy if you don't have one (or Foundry builds remotely when
-  `azure.yaml` sets `remoteBuild: true`).
+- **Azure CLI** logged in (`az login`) with **Owner** — or **Contributor + Role
+  Based Access Control Administrator** — at the **subscription** scope. The
+  deploy script creates a resource group *and* role assignments.
+- **`python3`** — the deploy script uses it to parse the REST responses.
+- An Azure subscription with quota for a `gpt-4o-mini` deployment. The script
+  provisions a **fresh, standalone** Foundry account, so you do **not** need an
+  existing project (Modules 1–11 are untouched).
+- **Docker** (or Podman) — *optional*, only for the local container loop in
+  Step 3. The deploy path builds the image remotely with `az acr build`, so no
+  local Docker daemon is required to ship.
+- **Azure Developer CLI** ≥ **1.23.0** — *optional*, only if you use the `azd`
+  alternative at the end of Step 4 (`azd ext install azure.ai.agents`).
 
 ---
 
@@ -137,9 +135,9 @@ Responses API.
 
 ## Step 3 — Run it as a container (optional)
 
-> ℹ️ **Optional.** `azure.yaml` sets `remoteBuild: true`, so Foundry builds the
-> image for you at deploy time — you don't need a working local container to
-> ship. Use this step only if you want to validate the image build itself.
+> ℹ️ **Optional.** The deploy path in Step 4 builds the image remotely with
+> `az acr build`, so you don't need a working local container to ship. Use this
+> step only if you want to validate the image build itself.
 
 ```bash
 # Build the image
@@ -153,237 +151,172 @@ docker build -t trip-planner:local .
 > cache, so the agent can't authenticate to Foundry from inside the container.
 > In production Foundry assigns the hosted agent its own **managed identity**,
 > which `DefaultAzureCredential` picks up automatically. For local validation,
-> prefer `dotnet run` (Step 2) or `azd ai agent run`, which run under your
-> `az login` identity.
+> prefer `dotnet run` (Step 2), which runs under your `az login` identity.
 
 ---
 
-## Step 4 — Deploy to Foundry
+## Step 4 — Deploy to Foundry (Bicep + REST API)
 
 Once the container runs cleanly locally, push it into Foundry. Foundry takes
 care of the runtime (scaling, ingress, auth, session isolation, observability)
-— you just hand it an image. The provisioning around that, though, still
-needs a Foundry project + container registry to publish to. `azd ai agent init`
-handles both.
+— you just hand it an image. The provisioning around that still needs a Foundry
+project, a container registry to publish to, and the right RBAC.
 
-You deploy into the Foundry project you already have (the `tripbot-project`
-you set up in Module 11). Pointing `azd ai agent init` at it with `-p` reuses
-the project's existing ACR, App Insights, and model deployment, and just wires
-`trip-planner` in as a new agent.
+Most enterprises ship that with **infrastructure-as-code + a REST call from a
+pipeline**, not an interactive CLI — so that's the path this module teaches. The
+[`cicd/`](cicd) folder packages it as a single script,
+[`deploy.sh`](cicd/deploy.sh), that:
+
+1. provisions a complete **standalone** stack with **Bicep** — Foundry account +
+   project, the `gpt-4o-mini` deployment, an ACR with a ManagedIdentity
+   connection, and Log Analytics + Application Insights for later observability
+   modules;
+2. grants the RBAC for you — **AcrPull** + **Foundry User** to the project's
+   managed identity (so the container can pull the image and call the model), and
+   **Foundry Project Manager** to you (so the version-create call succeeds);
+3. builds and pushes the image with **`az acr build`** (no local Docker daemon);
+4. registers the agent version through the Foundry **REST API**; and
+5. polls until the version reports `active`.
+
+> **Standalone by design.** Unlike Modules 1–11, Module 12 provisions its *own*
+> Foundry account rather than reusing `tripbot-project`. A fresh account
+> auto-provisions the hosted-agent runtime, which avoids the capability-host
+> provisioning dance the `azd` path needs.
+
+```bash
+# 1. Sign in and pick the subscription the stack should land in
+az login
+az account set --subscription <your-subscription-id>
+
+# 2. Deploy. A fresh ENVIRONMENT_NAME keeps these resources in their own
+#    resource group (rg-<ENVIRONMENT_NAME>), separate from Modules 1–11.
+cd src/12-foundry-hosted
+ENVIRONMENT_NAME=tripbot-cicd LOCATION=eastus2 ./cicd/deploy.sh
+```
+
+Your account needs **Owner** (or **Contributor + Role Based Access Control
+Administrator**) at the subscription scope, because the script creates a
+resource group *and* role assignments. The first run takes ~5–10 minutes; when
+it finishes it prints the project endpoint and the REST invoke URL.
+
+After a code change, re-register a new version without re-running the Bicep:
+
+```bash
+ENVIRONMENT_NAME=tripbot-cicd LOCATION=eastus2 ./cicd/deploy.sh --skip-infra
+```
+
+The same script runs unchanged in **GitHub Actions** via
+[`.github/workflows/deploy-hosted-agent.yml`](../../.github/workflows/deploy-hosted-agent.yml)
+(OIDC login, `workflow_dispatch`). See [`cicd/README.md`](cicd/README.md) for the
+full from-scratch walkthrough, the CI/OIDC setup, the model/region parameters,
+and image-pull troubleshooting.
+
+### Identity & RBAC — handled for you
+
+A hosted agent authenticates to Azure as a **managed identity** when its
+container pulls its image, calls the model, reads session history, or hits any
+other resource. In this standalone stack the agent runs as the **Foundry
+project's system-assigned identity**, and the Bicep wires up everything it needs:
+
+| Role | Assignee | Scope | Why |
+| --- | --- | --- | --- |
+| **AcrPull** | project identity | the ACR | pull the agent image |
+| **Foundry User** | project identity | the Foundry account | call the model endpoint |
+| **Foundry Project Manager** | you (the deployer) | the project | create agent versions |
+
+That's the whole RBAC story — there's nothing to fix up afterwards. This is the
+big advantage of the IaC path over a hand-rolled `az rest` POST, which would
+otherwise leave you chasing a `401` (deployer can't create the version) or a
+`500` `ManagedIdentityCredential` failure (agent identity can't call the model)
+on your own.
+
+> **Role rename.** Foundry User / Foundry Project Manager were formerly *Azure
+> AI User* / *Azure AI Project Manager* — you may still see the old names in the
+> portal. The role IDs and permissions are unchanged.
+>
+> **Wiring up downstream resources** (Key Vault, Storage, AI Search, …)? Grant
+> them to the **same project identity** by extending
+> [`cicd/infra/modules/foundry-project.bicep`](cicd/infra/modules/foundry-project.bicep)
+> with the role assignment, so it stays reproducible.
+
+### Calling the deployed agent
+
+The deployed endpoint is **not** `https://{agent-host}/responses` like the local
+server. It's scoped under your project endpoint with an agent subpath, and the
+refreshed preview requires a feature header:
+
+```bash
+# Both values are printed at the end of deploy.sh
+PROJECT_ENDPOINT="https://<account>.services.ai.azure.com/api/projects/trip-project"
+TOKEN=$(az account get-access-token --resource https://ai.azure.com/ --query accessToken -o tsv)
+
+curl -sS -X POST \
+  "$PROJECT_ENDPOINT/agents/trip-planner/endpoint/protocols/openai/responses?api-version=2025-11-15-preview" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Foundry-Features: HostedAgents=V1Preview" \
+  -H "Content-Type: application/json" \
+  -d '{"input":"Plan a 3-day trip to Tokyo.","model":"trip-planner","store":true}'
+```
+
+The `Foundry-Features: HostedAgents=V1Preview` header is mandatory during preview
+— without it the endpoint returns HTTP 400 `preview_feature_required`. Or skip
+curl entirely and test in [ai.azure.com](https://ai.azure.com): open your
+project, go to **Agents**, and you'll see `trip-planner` — click it to chat and
+to see its endpoint URL, container image, and live logs.
+
+### Gotcha on your first invoke — provisioning lag
+
+The *first* hosted agent you deploy triggers Foundry to provision the managed
+runtime behind the scenes. The agent version flips to `active` several minutes
+*before* its endpoint is actually reachable, so an early invoke can return
+`HTTP 404 "Subdomain does not map to a resource"`. This is normal first-deploy
+timing — wait a few minutes and retry. Subsequent deploys don't have this lag.
+
+### Alternative — deploy with `azd` (local dev convenience)
+
+Prefer an interactive CLI for quick experiments? `azd` can scaffold and deploy
+the same agent. It's handy for a one-off local loop, but it's **not** the
+recommended path for repeatable/enterprise delivery — it pulls in the
+`azure.ai.agents` extension, needs a one-time capability-host provisioning step,
+surfaces RBAC failures as warnings, and caches conversations locally.
 
 ```bash
 cd src/12-foundry-hosted
 azd auth login
+azd ext install azure.ai.agents        # needs azd ≥ 1.23.0
 
-# Grab the full ARM resource ID of your existing Foundry project
+# Reuse an existing Foundry project (e.g. Module 11's) by ARM resource ID
 PROJECT_ID=$(az cognitiveservices account show \
   -g <your-rg> -n tripbot-foundry --query id -o tsv)/projects/tripbot-project
 
-# In-place init: scaffold azure.yaml + infra/ next to this module's source.
-# --src . tells azd "the agent code is already here, don't download it".
-# --force is needed because the manifest sits inside the src tree.
-azd ai agent init \
-  -m ./agent.manifest.yaml \
-  --src . \
-  --force \
-  --agent-name trip-planner \
-  -p "$PROJECT_ID" \
-  -d gpt-4o-mini
-
-# Build image, push to the project's registry, register the agent version
+azd ai agent init -m ./agent.manifest.yaml --src . --force \
+  --agent-name trip-planner -p "$PROJECT_ID" -d gpt-4o-mini
 azd up
 ```
 
-> **One-time setup — enable hosted agents on the project.** `azd up` doesn't
-> provision the **Agents capability host** that hosted agents require, so create
-> it once, at **both** account and project scope, before `azd up`:
->
-> ```bash
-> SUB=<your-subscription-id>; RG=<your-rg>; ACC=tripbot-foundry; PROJ=tripbot-project
-> BODY='{"properties":{"capabilityHostKind":"Agents","enablePublicHostingEnvironment":true}}'
-> AV=2025-10-01-preview
-> # account scope
-> az rest --method put \
->   --url "https://management.azure.com/subscriptions/$SUB/resourceGroups/$RG/providers/Microsoft.CognitiveServices/accounts/$ACC/capabilityHosts/agents?api-version=$AV" \
->   --body "$BODY"
-> # project scope
-> az rest --method put \
->   --url "https://management.azure.com/subscriptions/$SUB/resourceGroups/$RG/providers/Microsoft.CognitiveServices/accounts/$ACC/projects/$PROJ/capabilityHosts/agents?api-version=$AV" \
->   --body "$BODY"
-> ```
->
-> Poll the same URLs with `az rest --method get` until each reports
-> `provisioningState: Succeeded`, then run `azd up`.
+> **One-time capability host.** `azd up` doesn't provision the **Agents
+> capability host** hosted agents require, so create it once at **both** account
+> and project scope first (`capabilityHostKind: Agents`,
+> `enablePublicHostingEnvironment: true`, api-version `2025-10-01-preview`), poll
+> until `provisioningState: Succeeded`, then run `azd up`. The Bicep path skips
+> this entirely because a fresh account auto-provisions the runtime.
 
-The generated `azure.yaml`, `infra/`, and `.azure/` folders are git-ignored
-at the repo root — they're per-developer build state, not part of the
-learning material.
+Two `azd`-specific snags to know:
 
-### Alternative — Bicep + REST (CI/CD pipelines, no `azd`)
+- **RBAC failures are silent.** The `azd ai agent` preview reports `azd up`
+  success even if the agent identity ends up with no **Foundry User** role on the
+  account (symptom: playground HTTP 500 `ManagedIdentityCredential`). Fix:
+  `az role assignment create --assignee-object-id <agent-oid> --role "Foundry User" --scope <account-id>`,
+  then wait 5–15 min for AAD propagation.
+- **Stale conversation cache.** `azd ai agent invoke` caches the conversation per
+  agent version in `~/.azd/config.json`; if your first call failed before the
+  conversation was created you'll get `HTTP 404 "Conversation '<id>' not found"`
+  on every retry. Clear it with
+  `azd config unset extensions.ai-agents.conversations` and
+  `azd config unset extensions.ai-agents.sessions`, then invoke again.
 
-For production CI/CD where you don't want to depend on `azd`, the
-[`cicd/`](cicd) folder provisions a complete **standalone** stack with **Bicep**
-(Foundry account + project + model deployment, ACR + ManagedIdentity connection,
-and Log Analytics + Application Insights) and registers the agent via the
-Foundry **REST API** — including all the RBAC the bare REST call would otherwise
-leave you to wire up by hand.
-
-```bash
-# from src/12-foundry-hosted — provisions infra, builds the image with
-# az acr build (no Docker), registers the agent version, polls until active
-./cicd/deploy.sh
-```
-
-The same script runs in GitHub Actions via
-[`.github/workflows/deploy-hosted-agent.yml`](../../.github/workflows/deploy-hosted-agent.yml)
-(OIDC login, `workflow_dispatch`). See [`cicd/README.md`](cicd/README.md) for a
-step-by-step **test-from-scratch** walkthrough (sign in → deploy → verify →
-iterate → tear down), prerequisites, RBAC, and the model/region parameters.
-
-Unlike a hand-rolled `az rest` POST, this path does **not** leave the identity
-or role assignments for you to fix up afterward — the Bicep grants AcrPull and
-Foundry User to the project identity, and `deploy.sh` grants you Foundry
-Project Manager at the project scope so the version-create call succeeds.
-
----
-
-`azd up` builds the image, pushes it to the project's registry, and creates
-(or updates) the hosted agent version with its own dedicated **Agent Entra
-Identity**. Provisioning a new version typically takes 2–5 minutes; wait
-until the version status reads `active`.
-
-Check status from the CLI without leaving your terminal:
-
-```bash
-azd ai agent show            # version status (creating → active → failed)
-azd ai agent monitor         # stream live container logs
-```
-
-Or verify in [ai.azure.com](https://ai.azure.com) — open your project, go to
-**Agents**, and you should see `trip-planner` listed alongside Module 11's
-Prompt Agent. Click it to see its endpoint URL, container image, and live logs.
-
-### Identity & RBAC — do this *before* calling the agent
-
-> ⚠️ **Read this section even if `azd up` succeeded.** In current `azd ai agent`
-> extension previews, RBAC assignment failures during `azd up` are surfaced as
-> **warnings, not errors** — the deploy reports success even if the agent's
-> identity ends up with no role on the Foundry account. The most common
-> symptom is the **playground returning HTTP 500** with a
-> `ManagedIdentityCredential` failure inside `FoundryStorageProvider` (the
-> hosted runtime's own session storage). The fix is always: assign **Foundry
-> User** to the agent identity at **account scope**.
->
-> **Deployer role:** to *create/deploy* a hosted agent you (the human running
-> `azd up`) need **Foundry Project Manager** at the project scope. **Role
-> rename:** Foundry User / Foundry Project Manager were formerly named *Azure
-> AI User* / *Azure AI Project Manager* — you may still see the old names in the
-> portal. The role IDs and permissions are unchanged.
-
-Each hosted agent has its own **Agent Entra Identity** (visible in the
-Foundry portal at the agent level — _not_ the same as the project's
-system-assigned MI). When the container calls the model, reads session
-history, or hits any other Azure resource, it authenticates as that identity
-via `DefaultAzureCredential`.
-
-To grant access:
-
-```bash
-# 1. Get the agent identity's object ID from the Foundry portal:
-#    Agents → trip-planner → Identity tab → copy the Object (principal) ID
-AGENT_OID=<paste-here>
-
-# 2. Get the Foundry account (cognitive services) resource ID
-FOUNDRY_ID=$(az cognitiveservices account show \
-  -g <your-rg> -n tripbot-foundry --query id -o tsv)
-
-# 3. Assign Foundry User at the account scope (not just the project)
-az role assignment create \
-  --assignee-object-id $AGENT_OID \
-  --assignee-principal-type ServicePrincipal \
-  --role "Foundry User" \
-  --scope $FOUNDRY_ID
-```
-
-Then **wait 5–15 minutes** for AAD propagation. The first few requests after
-grant can still fail with `ManagedIdentityCredential` errors even with the
-role assigned — this is normal AAD timing, not a misconfiguration.
-
-If your agent reads from Key Vault, Storage, AI Search, etc., grant those
-resources RBAC to the **same** agent identity (not the project MI). `azd up`
-provisions the identity but does not wire downstream RBAC for you.
-
-### Calling the deployed agent
-
-The simplest way to call the deployed agent is the CLI — it auto-detects the
-agent from `azure.yaml`, mints the token, sets the preview header, and targets
-the dedicated agent endpoint for you:
-
-```bash
-azd ai agent invoke "Plan a 3-day trip to Tokyo."
-```
-
-Under the hood the deployed endpoint is **not** `https://{agent-host}/responses`
-like the local server. It's scoped under your project endpoint with an agent
-subpath, and the refreshed preview requires a feature header:
-
-```http
-POST {project_endpoint}/agents/trip-planner/endpoint/protocols/openai/responses?api-version=2025-11-15-preview
-Authorization: Bearer <token>
-Foundry-Features: HostedAgents=V1Preview        # ← required during preview
-Content-Type: application/json
-
-{ "input": "Plan a 3-day trip to Tokyo.", "model": "trip-planner" }
-```
-
-Mint a token with:
-
-```bash
-az account get-access-token --resource https://ai.azure.com --query accessToken -o tsv
-```
-
-The `Foundry-Features` header is mandatory — without it the endpoint returns
-HTTP 400 `preview_feature_required`. The SDK and `azd ai agent invoke` set it
-automatically; raw REST clients (curl, VS Code REST Client) must add it
-themselves. For day-to-day testing of the deployed agent, prefer
-`azd ai agent invoke` / `azd ai agent show` — they handle auth and the header
-for you.
-
-### Two gotchas on your first invoke
-
-**1. "Subdomain does not map to a resource" right after deploy.** The *first*
-hosted agent you deploy triggers Foundry to provision the managed runtime
-behind the scenes. The agent version flips to `active` (visible in
-`azd ai agent show`) several minutes *before* its endpoint is actually
-reachable, so an early `azd ai agent invoke` can return
-`HTTP 404 "Subdomain does not map to a resource"`. This is normal first-deploy
-timing — wait a few minutes and retry. Subsequent deploys don't have this lag.
-
-**2. "Conversation '<id>' not found" on every retry.** `azd ai agent invoke`
-caches the conversation **per agent version** (in `~/.azd/config.json`). If your
-*first* call failed before the runtime created that conversation (e.g. you hit
-gotcha #1 above), every later call keeps replaying the same dead conversation ID
-and fails with `HTTP 404 "Conversation '<id>' not found"` — even though the
-agent is now healthy.
-
-First try a fresh session:
-
-```bash
-azd ai agent invoke --new-session "Plan a 3-day trip to Tokyo."
-```
-
-`--new-session` resets the *session* but **not** the cached *conversation*, so
-if you still see "Conversation not found", clear the cached conversation and
-session state, then invoke again:
-
-```bash
-azd config unset extensions.ai-agents.conversations
-azd config unset extensions.ai-agents.sessions
-azd ai agent invoke "Plan a 3-day trip to Tokyo."
-```
-
-This only clears azd's local chat cache (it starts fresh conversations next
-time) — it does not touch your deployed agent or any Azure resource.
+The generated `azure.yaml`, `infra/`, and `.azure/` folders are git-ignored —
+they're per-developer build state, not part of the learning material.
 
 ---
 
@@ -393,9 +326,9 @@ time) — it does not touch your deployed agent or any Azure resource.
 
 Edit the `instructions:` string in `Program.cs` so TripBot specializes in
 **budget travel under $1000/trip**. Run locally, hit it from `requests.http`,
-and confirm the responses change. Then redeploy with `azd up` — Foundry creates
-a new **version** of the same agent, so the old version stays addressable while
-the new one rolls out.
+and confirm the responses change. Then redeploy with
+`./cicd/deploy.sh --skip-infra` — Foundry creates a new **version** of the same
+agent, so the old version stays addressable while the new one rolls out.
 
 ### 🟡 Intermediate — Add a function tool
 
@@ -479,7 +412,7 @@ dotnet run                          # fails — fill in the TODOs
   those are *not* declared here. `Program.cs` reads `FOUNDRY_PROJECT_ENDPOINT`
   and normalizes it to the account host.
 - Top-level `resources:` — declares downstream Azure resources (here: the
-  model deployment). `azd ai agent init` uses this to wire up / provision them.
+  model deployment). The deploy path uses this to wire up / provision them.
 
 ---
 
@@ -496,9 +429,10 @@ fan out to tools).
 ❌ **Hardcoding the agent name.** Always read `AGENT_NAME` from the environment
 so the platform can stage versions or rename without code changes.
 
-❌ **Deploying every code change as a new agent.** Re-run `azd up` against the
-same manifest to push new **versions** of the same agent — clients keep their
-URLs and Foundry handles the rollover.
+❌ **Deploying every code change as a new agent.** Re-run
+`./cicd/deploy.sh --skip-infra` against the same manifest to push new
+**versions** of the same agent — clients keep their URLs and Foundry handles the
+rollover.
 
 ## References
 
