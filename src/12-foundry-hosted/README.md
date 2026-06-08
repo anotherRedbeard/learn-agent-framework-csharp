@@ -178,10 +178,17 @@ pipeline**, not an interactive CLI — so that's the path this module teaches. T
 4. registers the agent version through the Foundry **REST API**; and
 5. polls until the version reports `active`.
 
-> **Standalone by design.** Unlike Modules 1–11, Module 12 provisions its *own*
-> Foundry account rather than reusing `tripbot-project`. A fresh account
-> auto-provisions the hosted-agent runtime, which avoids the capability-host
-> provisioning dance the `azd` path needs.
+> **Standalone by design.** By default Module 12 provisions its *own* Foundry
+> account rather than reusing `tripbot-project`. A fresh account auto-provisions
+> the hosted-agent runtime, which avoids the capability-host provisioning dance
+> the `azd` path needs.
+>
+> **Want it next to your prompt agent?** You can instead deploy the hosted agent
+> into the *existing* `tripbot-project` (the one Modules 1–11 use) so both agents
+> appear together — see
+> [Deploy into an existing Foundry](cicd/README.md#deploy-into-an-existing-foundry-side-by-side-with-modules-111).
+> It reuses the base account (redeployed on the `2026-03-01` API) and adds only
+> an ACR + the project's image-pull/model RBAC.
 
 ```bash
 # 1. Sign in and pick the subscription the stack should land in

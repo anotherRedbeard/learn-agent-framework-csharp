@@ -10,6 +10,17 @@ The flow is identical whether you run it locally or in CI:
 Bicep infra  ->  az acr build  ->  POST /agents/{name}/versions  ->  poll until active
 ```
 
+There are **two targets**:
+
+- **Standalone** (default) — `infra/main.bicep` creates a *fresh* Foundry
+  account + project just for the hosted agent. Self-contained, nothing else to
+  set up.
+- **Existing** — `infra/main.shared.bicep` adds only the hosted-agent pieces to
+  the Foundry account/project the rest of the repo already uses
+  (`tripbot-foundry` / `tripbot-project`), so the hosted agent sits **next to the
+  Modules 1–11 prompt agent**. See
+  [Deploy into an existing Foundry](#deploy-into-an-existing-foundry-side-by-side-with-modules-111).
+
 ## What gets deployed
 
 `infra/main.bicep` (subscription scope) creates a resource group and, inside it:
@@ -78,6 +89,48 @@ Tear down everything when finished:
 az group delete -n rg-tripbot-cicd --yes --no-wait
 ```
 
+## Deploy into an existing Foundry (side by side with Modules 1–11)
+
+Want the hosted `trip-planner` to live in the **same** project as the prompt
+agent from the earlier modules? Use the **existing** target instead of creating
+a standalone account.
+
+**Step 1 — make the base account hosting-capable (one time).** The hosted-agent
+runtime is auto-provisioned only when the account is declared with the
+**`2026-03-01`** account API. The repo-root [`infra/main.bicep`](../../../infra/main.bicep)
+now uses that version, so redeploy it once (this is an idempotent in-place
+update — your project, model, and prompt agent are preserved):
+
+```bash
+az deployment group create \
+  -g rg-tripbot \
+  --template-file infra/main.bicep \
+  --parameters infra/main.bicepparam
+```
+
+**Step 2 — add the hosted-agent pieces + register the agent.** From
+`src/12-foundry-hosted`:
+
+```bash
+DEPLOY_TARGET=existing \
+RESOURCE_GROUP=rg-tripbot \
+ACCOUNT_NAME=tripbot-foundry \
+PROJECT_NAME=tripbot-project \
+LOCATION=eastus2 \
+./cicd/deploy.sh
+```
+
+[`infra/main.shared.bicep`](infra/main.shared.bicep) references the existing
+account/project and adds only an **ACR** (+ AcrPull → project identity + ACR
+connection) and **Foundry User → project identity** — nothing that would disturb
+Modules 1–11. The script then builds the image and registers `trip-planner`
+against `tripbot-project`, so both agents show up together under **Agents** in
+the portal.
+
+> If the first version reports `failed` with an image-pull or runtime error,
+> the project's new RBAC (or the freshly-enabled hosting environment) likely
+> hadn't propagated yet — re-run with `--skip-infra` to register a new version
+> against the same infrastructure.
 
 ## Run it in CI (GitHub Actions)
 

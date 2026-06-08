@@ -9,7 +9,10 @@
 //   5. (optional) Log Analytics + Application Insights wired into the project,
 //      so any module can demonstrate observability / tracing
 //
-// API version 2025-06-01 required for allowProjectManagement and projects support.
+// API version 2026-03-01 enables hosted (container) agents on the account in
+// addition to allowProjectManagement and projects support. Modules 1–11 use the
+// same account/project; Module 12 reuses it for a hosted agent (see
+// src/12-foundry-hosted/cicd/infra/main.shared.bicep).
 // Reference: https://github.com/anotherRedbeard/agentic-learning/tree/main/infra/ai-foundry
 // =============================================================================
 
@@ -48,7 +51,7 @@ param enableObservability bool = true
 
 // ── Azure Foundry Account ──────────────────────────────────────────────────────
 // AIServices account with allowProjectManagement: true enables project creation
-resource foundryAccount 'Microsoft.CognitiveServices/accounts@2025-06-01' = {
+resource foundryAccount 'Microsoft.CognitiveServices/accounts@2026-03-01' = {
   name: '${name}-foundry'
   location: location
   kind: 'AIServices'
@@ -69,7 +72,7 @@ resource foundryAccount 'Microsoft.CognitiveServices/accounts@2025-06-01' = {
 // ── Foundry Project ────────────────────────────────────────────────────────────
 // The project organizes your work and is visible in ai.azure.com.
 // AIProjectClient connects to the project endpoint.
-resource foundryProject 'Microsoft.CognitiveServices/accounts/projects@2025-06-01' = {
+resource foundryProject 'Microsoft.CognitiveServices/accounts/projects@2026-03-01' = {
   parent: foundryAccount
   name: projectName
   location: location
@@ -82,7 +85,7 @@ resource foundryProject 'Microsoft.CognitiveServices/accounts/projects@2025-06-0
 // ── Model Deployment ───────────────────────────────────────────────────────────
 // Deploys gpt-4o-mini (or your chosen model) at the account level.
 // Available to all projects within the account.
-resource modelDeployment 'Microsoft.CognitiveServices/accounts/deployments@2025-06-01' = {
+resource modelDeployment 'Microsoft.CognitiveServices/accounts/deployments@2026-03-01' = {
   parent: foundryAccount
   name: modelDeploymentName
   sku: {

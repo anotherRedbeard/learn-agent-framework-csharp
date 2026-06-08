@@ -25,6 +25,13 @@
 #   ENVIRONMENT_NAME  (default: tripbot-cicd)
 #   LOCATION          (default: eastus2)
 #   AGENT_NAME        (default: trip-planner)
+#
+# Deploy into an EXISTING Foundry project (so the hosted agent sits next to the
+# Modules 1-11 prompt agent) instead of a fresh standalone account:
+#   DEPLOY_TARGET=existing RESOURCE_GROUP=rg-tripbot LOCATION=eastus2 \
+#     ACCOUNT_NAME=tripbot-foundry PROJECT_NAME=tripbot-project ./cicd/deploy.sh
+#   (Redeploy the repo-root infra/main.bicep first - it must be on the 2026-03-01
+#    account API for the existing account to host containers.)
 
 set -euo pipefail
 
@@ -43,6 +50,12 @@ AGENT_MEMORY="${AGENT_MEMORY:-0.5Gi}"
 API_VERSION="2025-11-15-preview"
 MAX_POLL_SECONDS="${MAX_POLL_SECONDS:-600}"
 
+# standalone (default) creates a fresh account; existing reuses tripbot-foundry.
+DEPLOY_TARGET="${DEPLOY_TARGET:-standalone}"
+RESOURCE_GROUP="${RESOURCE_GROUP:-rg-tripbot}"
+ACCOUNT_NAME="${ACCOUNT_NAME:-tripbot-foundry}"
+PROJECT_NAME_PARAM="${PROJECT_NAME:-tripbot-project}"
+
 # ── Argument parsing ─────────────────────────────────────────────────────────
 SKIP_INFRA=false
 SKIP_RBAC="${SKIP_RBAC:-false}"
@@ -54,21 +67,46 @@ for arg in "$@"; do
   esac
 done
 
+# Reject typos so a misspelled target never silently falls back to standalone.
+case "$DEPLOY_TARGET" in
+  standalone|existing) ;;
+  *) echo "ERROR: DEPLOY_TARGET must be 'standalone' or 'existing' (got '${DEPLOY_TARGET}')." >&2; exit 1 ;;
+esac
+
+if [ "$DEPLOY_TARGET" = "existing" ]; then
+  echo "==> Target: EXISTING project '${PROJECT_NAME_PARAM}' on account '${ACCOUNT_NAME}' (resource group ${RESOURCE_GROUP})."
+  echo "    Subscription: $(az account show --query name -o tsv 2>/dev/null || echo '?')"
+  echo "    NOTE: the repo-root infra/main.bicep must already be redeployed on the"
+  echo "          2026-03-01 account API, or hosted-agent activation will fail."
+fi
+
 # ── Step 1: Deploy infrastructure ────────────────────────────────────────────
 if [ "$SKIP_INFRA" = false ]; then
-  echo "==> Deploying infrastructure (Bicep)..."
-  az deployment sub create \
-    --name          "${DEPLOYMENT_NAME}" \
-    --location      "${LOCATION}" \
-    --template-file "${INFRA_DIR}/main.bicep" \
-    --parameters    "@${INFRA_DIR}/main.parameters.json" \
-    --parameters    environmentName="${ENVIRONMENT_NAME}" location="${LOCATION}" aiDeploymentsLocation="${LOCATION}" \
-    --output none
+  if [ "$DEPLOY_TARGET" = "existing" ]; then
+    echo "==> Deploying hosted-agent add-on into existing project '${PROJECT_NAME_PARAM}' (resource group ${RESOURCE_GROUP})..."
+    az deployment group create \
+      --resource-group "${RESOURCE_GROUP}" \
+      --name           "${DEPLOYMENT_NAME}" \
+      --template-file  "${INFRA_DIR}/main.shared.bicep" \
+      --parameters     location="${LOCATION}" existingAccountName="${ACCOUNT_NAME}" existingProjectName="${PROJECT_NAME_PARAM}" \
+      --output none
 
-  DEPLOY_STATE=$(az deployment sub show --name "${DEPLOYMENT_NAME}" --query properties.provisioningState -o tsv)
+    DEPLOY_STATE=$(az deployment group show --resource-group "${RESOURCE_GROUP}" --name "${DEPLOYMENT_NAME}" --query properties.provisioningState -o tsv)
+  else
+    echo "==> Deploying standalone infrastructure (Bicep)..."
+    az deployment sub create \
+      --name          "${DEPLOYMENT_NAME}" \
+      --location      "${LOCATION}" \
+      --template-file "${INFRA_DIR}/main.bicep" \
+      --parameters    "@${INFRA_DIR}/main.parameters.json" \
+      --parameters    environmentName="${ENVIRONMENT_NAME}" location="${LOCATION}" aiDeploymentsLocation="${LOCATION}" \
+      --output none
+
+    DEPLOY_STATE=$(az deployment sub show --name "${DEPLOYMENT_NAME}" --query properties.provisioningState -o tsv)
+  fi
+
   if [ "${DEPLOY_STATE}" != "Succeeded" ]; then
     echo "ERROR: Deployment finished in state '${DEPLOY_STATE}' — not Succeeded." >&2
-    echo "       az deployment sub show --name '${DEPLOYMENT_NAME}' --query properties.error" >&2
     exit 1
   fi
   echo "    Infrastructure deployed."
@@ -78,7 +116,11 @@ fi
 
 # ── Step 2: Read deployment outputs ──────────────────────────────────────────
 echo "==> Reading deployment outputs..."
-OUTPUTS=$(az deployment sub show --name "${DEPLOYMENT_NAME}" --query properties.outputs -o json)
+if [ "$DEPLOY_TARGET" = "existing" ]; then
+  OUTPUTS=$(az deployment group show --resource-group "${RESOURCE_GROUP}" --name "${DEPLOYMENT_NAME}" --query properties.outputs -o json)
+else
+  OUTPUTS=$(az deployment sub show --name "${DEPLOYMENT_NAME}" --query properties.outputs -o json)
+fi
 if [ -z "${OUTPUTS}" ] || [ "${OUTPUTS}" = "null" ] || [ "${OUTPUTS}" = "{}" ]; then
   echo "ERROR: Deployment '${DEPLOYMENT_NAME}' returned no outputs." >&2
   exit 1
@@ -91,6 +133,15 @@ PROJECT_ENDPOINT=$(      _get AZURE_AI_PROJECT_ENDPOINT)
 ACR_ENDPOINT=$(          _get AZURE_CONTAINER_REGISTRY_ENDPOINT)
 MODEL_DEPLOYMENT_NAME=$( _get AZURE_AI_MODEL_DEPLOYMENT_NAME)
 ACR_NAME="${ACR_ENDPOINT%%.azurecr.io}"
+
+# Guard against reading a stale deployment of the same name (e.g. with
+# --skip-infra after switching targets): the outputs must name the project we
+# were asked to target.
+if [ "$DEPLOY_TARGET" = "existing" ] && [ "${PROJECT_NAME}" != "${PROJECT_NAME_PARAM}" ]; then
+  echo "ERROR: deployment '${DEPLOYMENT_NAME}' outputs project '${PROJECT_NAME}', not the requested '${PROJECT_NAME_PARAM}'." >&2
+  echo "       Those outputs are stale — re-run without --skip-infra to redeploy." >&2
+  exit 1
+fi
 
 echo "    Project         : ${PROJECT_NAME}"
 echo "    Project endpoint: ${PROJECT_ENDPOINT}"
