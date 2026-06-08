@@ -34,7 +34,15 @@ Two RBAC grants matter and are handled for you:
 > No explicit `capabilityHost` resource is needed — the hosted-agent runtime is
 > provisioned automatically by the account API version used here.
 
-## Run it locally (test from scratch)
+## Run it locally
+
+The **[Module 12 README → Step 4](../README.md#step-4--deploy-to-foundry-bicep--rest-api)**
+has the full sign-in → deploy → verify → iterate walkthrough. In short, from
+`src/12-foundry-hosted`:
+
+```bash
+ENVIRONMENT_NAME=tripbot-cicd LOCATION=eastus2 ./cicd/deploy.sh
+```
 
 Prerequisites: `az` (logged in), `git`, `curl`, `python3`. You do **not** need
 Docker — `az acr build` builds the image in Azure. Your account needs **Owner**
@@ -42,58 +50,9 @@ Docker — `az acr build` builds the image in Azure. Your account needs **Owner*
 subscription scope, because the Bicep creates a resource group *and* role
 assignments.
 
-**1. Sign in and select the subscription**
-
-```bash
-az login
-az account set --subscription <your-subscription-id>
-az account show --query "{sub:name, user:user.name}" -o table
-```
-
-**2. Deploy**
-
-```bash
-cd src/12-foundry-hosted
-
-# A fresh ENVIRONMENT_NAME keeps these resources separate from any existing
-# tripbot project. It creates resource group rg-<ENVIRONMENT_NAME>.
-ENVIRONMENT_NAME=tripbot-cicd LOCATION=eastus2 ./cicd/deploy.sh
-```
-
-In order, this: deploys infra (Foundry account + project + model + ACR + App
-Insights) → grants you **Foundry Project Manager** on the project (+120s
-propagation wait) → builds/pushes the image with `az acr build` → registers the
-`trip-planner` agent version → polls until `active`. The first run takes
-~5–10 min; it prints the project endpoint and an invoke URL when done.
-
-**3. Verify it works**
-
-```bash
-PROJECT_ENDPOINT="<printed by the script>"   # https://<acct>.services.ai.azure.com/api/projects/trip-project
-TOKEN=$(az account get-access-token --resource https://ai.azure.com/ --query accessToken -o tsv)
-
-curl -sS -X POST \
-  "$PROJECT_ENDPOINT/agents/trip-planner/endpoint/protocols/openai/responses?api-version=2025-11-15-preview" \
-  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-  -d '{"input":"Plan a 3-day trip to Tokyo in cherry blossom season.","store":true}'
-```
-
-Or open the [Foundry portal](https://ai.azure.com/), select project
-`trip-project`, and test `trip-planner` under **Agents**.
-
-**4. Iterate on a code change (fast inner loop)**
-
-Re-register a new version without re-running the Bicep:
-
-```bash
-ENVIRONMENT_NAME=tripbot-cicd LOCATION=eastus2 ./cicd/deploy.sh --skip-infra
-```
-
-**5. Tear down when finished**
-
-```bash
-az group delete -n rg-tripbot-cicd --yes --no-wait
-```
+In order, the script runs: Bicep infra → grant **Foundry Project Manager** to
+you (+120s propagation) → `az acr build` → register the `trip-planner` version
+via REST → poll until `active`.
 
 ### Options
 
@@ -113,6 +72,13 @@ Useful flags:
 Edit the model / region / project name defaults in
 [`infra/main.parameters.json`](infra/main.parameters.json).
 
+Tear down everything when finished:
+
+```bash
+az group delete -n rg-tripbot-cicd --yes --no-wait
+```
+
+
 ## Run it in CI (GitHub Actions)
 
 The workflow [`.github/workflows/deploy-hosted-agent.yml`](../../../.github/workflows/deploy-hosted-agent.yml)
@@ -128,25 +94,6 @@ The workflow [`.github/workflows/deploy-hosted-agent.yml`](../../../.github/work
      directly, avoiding a Microsoft Graph read the SP may not be allowed to make.
 3. Run the workflow from the **Actions** tab (`workflow_dispatch`), choosing the
    environment name, region, and agent name.
-
-## Test the deployed agent
-
-After the script reports the version is `active`, call it (a fresh Foundry token
-is required — `az account get-access-token --resource https://ai.azure.com/`):
-
-```bash
-PROJECT_ENDPOINT="https://<account>.services.ai.azure.com/api/projects/<project>"
-TOKEN=$(az account get-access-token --resource https://ai.azure.com/ --query accessToken -o tsv)
-
-curl -sS -X POST \
-  "$PROJECT_ENDPOINT/agents/trip-planner/endpoint/protocols/openai/responses?api-version=2025-11-15-preview" \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"input":"Plan a 3-day trip to Tokyo in cherry blossom season.","store":true}'
-```
-
-Or open the [Foundry portal](https://ai.azure.com/), select your project, and
-test the agent under **Agents**.
 
 ## First-deploy timing
 

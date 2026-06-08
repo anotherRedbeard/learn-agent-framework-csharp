@@ -208,8 +208,8 @@ ENVIRONMENT_NAME=tripbot-cicd LOCATION=eastus2 ./cicd/deploy.sh --skip-infra
 The same script runs unchanged in **GitHub Actions** via
 [`.github/workflows/deploy-hosted-agent.yml`](../../.github/workflows/deploy-hosted-agent.yml)
 (OIDC login, `workflow_dispatch`). See [`cicd/README.md`](cicd/README.md) for the
-full from-scratch walkthrough, the CI/OIDC setup, the model/region parameters,
-and image-pull troubleshooting.
+resource breakdown, the CI/OIDC setup, the deploy flags and model/region
+parameters, and image-pull troubleshooting.
 
 ### Identity & RBAC — handled for you
 
