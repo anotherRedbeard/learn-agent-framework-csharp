@@ -10,68 +10,78 @@ The flow is identical whether you run it locally or in CI:
 Bicep infra  ->  az acr build  ->  POST /agents/{name}/versions  ->  poll until active
 ```
 
-There are **two targets**:
-
-- **Standalone** (default) — `infra/main.bicep` creates a *fresh* Foundry
-  account + project just for the hosted agent. Self-contained, nothing else to
-  set up.
-- **Existing** — `infra/main.shared.bicep` adds only the hosted-agent pieces to
-  the Foundry account/project the rest of the repo already uses
-  (`tripbot-foundry` / `tripbot-project`), so the hosted agent sits **next to the
-  Modules 1–11 prompt agent**. See
-  [Deploy into an existing Foundry](#deploy-into-an-existing-foundry-side-by-side-with-modules-111).
+By **default** the script deploys **into your existing Modules 1–11 Foundry
+account/project**, so the hosted `trip-planner` sits **next to the prompt agent**
+under **Agents**. `infra/main.shared.bicep` adds only the hosted-agent pieces (an
+ACR + RBAC) — it doesn't touch your model or prompt agent. You can opt into a
+fresh **standalone** account instead; see
+[the standalone alternative](#alternative--standalone-fresh-account--resource-group).
 
 ## What gets deployed
 
-`infra/main.bicep` (subscription scope) creates a resource group and, inside it:
+**Default (existing target)** — `infra/main.shared.bicep` references your existing
+account/project and adds just:
 
 | Resource | Module | Why |
 | --- | --- | --- |
-| Azure AI Foundry account (`AIServices`) + model deployment | `modules/foundry.bicep` | Hosts the project and the model the agent calls |
-| Foundry project (system-assigned identity) | `modules/foundry-project.bicep` | The identity the agent container runs as |
 | Container registry (ACR) | `modules/acr.bicep` | Stores the agent image |
 | ACR connection on the project (`ManagedIdentity`) + AcrPull | `modules/acr.bicep` | Lets the runtime pull the image |
-| Log Analytics + Application Insights + project connection | `modules/loganalytics.bicep`, `modules/applicationinsights.bicep`, `modules/foundry-project.bicep` | Telemetry for the agent (used by later observability modules) |
+| Foundry User → project identity (on the account) | `main.shared.bicep` | Project-level model access |
 
-Two RBAC grants matter and are handled for you:
+**Standalone target** — `infra/main.bicep` (subscription scope) instead creates a
+*fresh* resource group containing a whole new Foundry account + project + model +
+ACR + Log Analytics/App Insights (the `modules/*.bicep` set).
 
-- **AcrPull → project managed identity** (in Bicep) — so the runtime can pull the image.
-- **Foundry User → project managed identity** (in Bicep) — so the container can call the model endpoint.
+Three RBAC grants matter and are handled for you in both targets:
+
+- **AcrPull → project managed identity** (Bicep) — so the runtime can pull the image.
 - **Foundry Project Manager → *you* (the deployer)** at the project scope — granted by
   `deploy.sh`, because the Foundry data plane evaluates `agents/write` at the
-  **project** scope, not subscription/RG. (Owner at the subscription is *not*
-  enough to register an agent version.)
+  **project** scope (Owner at the subscription is *not* enough to register a version).
+- **Foundry User → the agent's instance identity** on the account — granted by
+  `deploy.sh` *after* the version is active, so the running container can call the
+  model. (Foundry v2 hosted agents run under a per-agent identity, not the project's.)
 
 > No explicit `capabilityHost` resource is needed — the hosted-agent runtime is
-> provisioned automatically by the account API version used here.
+> provisioned automatically by the `2026-03-01` account API. Your base account
+> must already be on that API (the repo-root `infra/main.bicep` is — redeploy it
+> once if your account predates the bump).
 
 ## Run it locally
 
 The **[Module 12 README → Step 4](../README.md#step-4--deploy-to-foundry-bicep--rest-api)**
 has the full sign-in → deploy → verify → iterate walkthrough. In short, from
-`src/12-foundry-hosted`:
+`src/12-foundry-hosted`, set `ACCOUNT_NAME`/`PROJECT_NAME` to match your
+[`../../../infra/main.bicepparam`](../../../infra/main.bicepparam) (account =
+`<name>-foundry`):
 
 ```bash
-ENVIRONMENT_NAME=tripbot-cicd LOCATION=eastus2 ./cicd/deploy.sh
+RESOURCE_GROUP=rg-tripbot \
+ACCOUNT_NAME=tripbot-foundry \
+PROJECT_NAME=tripbot-project \
+LOCATION=eastus2 \
+./cicd/deploy.sh
 ```
+
+> **One-time prerequisite.** Your base account must be on the **`2026-03-01`**
+> API to host containers. The repo-root `infra/main.bicep` already is, so if your
+> account predates that bump, redeploy it once (idempotent — project, model, and
+> prompt agent are preserved):
+> ```bash
+> az deployment group create -g rg-tripbot \
+>   --template-file infra/main.bicep --parameters infra/main.bicepparam
+> ```
 
 Prerequisites: `az` (logged in), `git`, `curl`, `python3`. You do **not** need
 Docker — `az acr build` builds the image in Azure. Your account needs **Owner**
 (or **Contributor + Role Based Access Control Administrator**) at the
-subscription scope, because the Bicep creates a resource group *and* role
-assignments.
+subscription scope, because the script creates role assignments.
 
-In order, the script runs: Bicep infra → grant **Foundry Project Manager** to
+In order, the script runs: Bicep add-on → grant **Foundry Project Manager** to
 you (+120s propagation) → `az acr build` → register the `trip-planner` version
-via REST → poll until `active`.
+via REST → poll until `active` → grant the agent identity **Foundry User**.
 
 ### Options
-
-Override the defaults with env vars:
-
-```bash
-ENVIRONMENT_NAME=tripbot-cicd LOCATION=eastus2 AGENT_NAME=trip-planner ./cicd/deploy.sh
-```
 
 Useful flags:
 
@@ -80,61 +90,33 @@ Useful flags:
 - `--skip-rbac` — skip the Foundry Project Manager grant + 120s propagation wait
   (use when you already have the role on the project).
 
-Edit the model / region / project name defaults in
+## Alternative — standalone fresh account / resource group
+
+Want the hosted agent in a **completely separate** Foundry account and resource
+group (leaving Modules 1–11 untouched)? Use the **standalone** target. From
+`src/12-foundry-hosted`:
+
+```bash
+DEPLOY_TARGET=standalone \
+ENVIRONMENT_NAME=tripbot-cicd \
+LOCATION=eastus2 \
+./cicd/deploy.sh
+```
+
+This runs `infra/main.bicep` at subscription scope, creating a brand-new resource
+group (`rg-<ENVIRONMENT_NAME>`) with its own Foundry account + project + model +
+ACR. Edit the model / region / project-name defaults in
 [`infra/main.parameters.json`](infra/main.parameters.json).
 
-Tear down everything when finished:
+Tear it down when finished:
 
 ```bash
 az group delete -n rg-tripbot-cicd --yes --no-wait
 ```
 
-## Deploy into an existing Foundry (side by side with Modules 1–11)
-
-Want the hosted `trip-planner` to live in the **same** project as the prompt
-agent from the earlier modules? Use the **existing** target instead of creating
-a standalone account.
-
-**Step 1 — make the base account hosting-capable (one time).** The hosted-agent
-runtime is auto-provisioned only when the account is declared with the
-**`2026-03-01`** account API. The repo-root [`infra/main.bicep`](../../../infra/main.bicep)
-now uses that version, so redeploy it once (this is an idempotent in-place
-update — your project, model, and prompt agent are preserved):
-
-```bash
-az deployment group create \
-  -g rg-tripbot \
-  --template-file infra/main.bicep \
-  --parameters infra/main.bicepparam
-```
-
-**Step 2 — add the hosted-agent pieces + register the agent.** From
-`src/12-foundry-hosted`. `ACCOUNT_NAME` and `PROJECT_NAME` are **not** hardcoded
-— they're env vars. Set them to **your** base resources: the account is
-`<name>-foundry` where `<name>` and `projectName` are whatever you put in
-[`infra/main.bicepparam`](../../../infra/main.bicepparam) (the example below uses
-the repo defaults `name=tripbot` / `projectName=tripbot-project`).
-
-```bash
-DEPLOY_TARGET=existing \
-RESOURCE_GROUP=rg-tripbot \
-ACCOUNT_NAME=tripbot-foundry \
-PROJECT_NAME=tripbot-project \
-LOCATION=eastus2 \
-./cicd/deploy.sh
-```
-
-[`infra/main.shared.bicep`](infra/main.shared.bicep) references the existing
-account/project and adds only an **ACR** (+ AcrPull → project identity + ACR
-connection) and **Foundry User → project identity** — nothing that would disturb
-Modules 1–11. The script then builds the image and registers `trip-planner`
-against `tripbot-project`, so both agents show up together under **Agents** in
-the portal.
-
 > If the first version reports `failed` with an image-pull or runtime error,
-> the project's new RBAC (or the freshly-enabled hosting environment) likely
-> hadn't propagated yet — re-run with `--skip-infra` to register a new version
-> against the same infrastructure.
+> RBAC (or a freshly-enabled hosting environment) likely hadn't propagated yet —
+> re-run with `--skip-infra` to register a new version against the same infra.
 
 ## Run it in CI (GitHub Actions)
 

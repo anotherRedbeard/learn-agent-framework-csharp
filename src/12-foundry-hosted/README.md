@@ -46,9 +46,10 @@ In addition to the [repo prerequisites](../../docs/prerequisites.md), you'll nee
   Based Access Control Administrator** — at the **subscription** scope. The
   deploy script creates a resource group *and* role assignments.
 - **`python3`** — the deploy script uses it to parse the REST responses.
-- An Azure subscription with quota for a `gpt-4o-mini` deployment. The script
-  provisions a **fresh, standalone** Foundry account, so you do **not** need an
-  existing project (Modules 1–11 are untouched).
+- An Azure subscription with quota for a `gpt-4o-mini` deployment. By default the
+  script deploys **into your existing Modules 1–11 Foundry account/project** (so
+  the hosted agent sits next to the prompt agent); a fresh standalone account is
+  an opt-in alternative.
 - **Docker** (or Podman) — *optional*, only for the local container loop in
   Step 3. The deploy path builds the image remotely with `az acr build`, so no
   local Docker daemon is required to ship.
@@ -279,28 +280,33 @@ pipeline**, not an interactive CLI — so that's the path this module teaches. T
 **Background — what `deploy.sh` does for you** (you don't run these individually;
 the script orchestrates them):
 
-1. provisions a complete **standalone** stack with **Bicep** — Foundry account +
-   project, the `gpt-4o-mini` deployment, an ACR with a ManagedIdentity
-   connection, and Log Analytics + Application Insights for later observability
-   modules;
+1. adds the hosted-agent pieces with **Bicep** — by default it reuses your
+   existing Modules 1–11 Foundry account/project and adds just an **ACR** (with a
+   ManagedIdentity connection); the standalone alternative provisions a whole
+   fresh account + project + model instead;
 2. grants the RBAC for you — **AcrPull** + **Foundry User** to the project's
-   managed identity (so the container can pull the image and call the model), and
-   **Foundry Project Manager** to you (so the version-create call succeeds);
+   managed identity (image pull + project-level access), **Foundry Project
+   Manager** to you (so the version-create call succeeds), and **Foundry User** to
+   the agent's instance identity (so the running container can call the model);
 3. builds and pushes the image with **`az acr build`** (no local Docker daemon);
 4. registers the agent version through the Foundry **REST API**; and
 5. polls until the version reports `active`.
 
-> **Standalone by design.** By default Module 12 provisions its *own* Foundry
-> account rather than reusing `tripbot-project`. A fresh account auto-provisions
-> the hosted-agent runtime, which avoids the capability-host provisioning dance
-> the `azd` path needs.
+> **Side-by-side by default.** The script deploys into the **existing**
+> `tripbot-project` (the one Modules 1–11 use), so the hosted `trip-planner`
+> appears right next to your prompt agent under **Agents**. It only adds an ACR +
+> RBAC; it does **not** touch your model or prompt agent. This requires your base
+> account to be on the **`2026-03-01`** API (the repo-root `infra/main.bicep`
+> already is — redeploy it once if your account predates that bump).
 >
-> **Want it next to your prompt agent?** You can instead deploy the hosted agent
-> into the *existing* `tripbot-project` (the one Modules 1–11 use) so both agents
-> appear together — see
-> [Deploy into an existing Foundry](cicd/README.md#deploy-into-an-existing-foundry-side-by-side-with-modules-111).
-> It reuses the base account (redeployed on the `2026-03-01` API) and adds only
-> an ACR + the project's image-pull/model RBAC.
+> Set `ACCOUNT_NAME`/`PROJECT_NAME` to match your
+> [`infra/main.bicepparam`](../../infra/main.bicepparam) (account = `<name>-foundry`).
+>
+> **Want a completely separate stack instead?** Run
+> `DEPLOY_TARGET=standalone ./cicd/deploy.sh` to provision a *fresh* Foundry
+> account in its own resource group (`rg-<ENVIRONMENT_NAME>`), leaving Modules
+> 1–11 untouched — see
+> [the standalone alternative](cicd/README.md#alternative--standalone-fresh-account--resource-group).
 
 #### 4a. Select your subscription
 
@@ -321,18 +327,23 @@ az account show --query "{name:name, id:id}" -o table
 
 #### 4b. Run the deploy script
 
-**▶️ Do** — deploy the stack (run from `src/12-foundry-hosted`, where you already
-are). A fresh `ENVIRONMENT_NAME` keeps these resources in their own resource
-group (`rg-<ENVIRONMENT_NAME>`), separate from Modules 1–11:
+**▶️ Do** — deploy the hosted agent into your existing Foundry (run from
+`src/12-foundry-hosted`, where you already are). Set `ACCOUNT_NAME`/`PROJECT_NAME`
+to match your [`infra/main.bicepparam`](../../infra/main.bicepparam) — the account
+is `<name>-foundry`:
 
 ```bash
-ENVIRONMENT_NAME=tripbot-cicd LOCATION=eastus2 ./cicd/deploy.sh
+RESOURCE_GROUP=rg-tripbot \
+ACCOUNT_NAME=tripbot-foundry \
+PROJECT_NAME=tripbot-project \
+LOCATION=eastus2 \
+./cicd/deploy.sh
 ```
 
 > **Heads-up — permissions & timing.** Your account needs **Owner** (or
 > **Contributor + Role Based Access Control Administrator**) at the subscription
-> scope, because the script creates a resource group *and* role assignments. The
-> first run takes ~5–10 minutes.
+> scope, because the script creates role assignments (and, for standalone, a
+> resource group). The first run takes ~5–10 minutes.
 
 **✅ Verify** — when the script finishes it prints the **project endpoint** and
 the **REST invoke URL**, and the agent version reports `active`. Copy both
@@ -343,7 +354,7 @@ printed values — you'll use them in [Calling the deployed agent](#calling-the-
 **▶️ Do** — re-register a new version without re-running the Bicep:
 
 ```bash
-ENVIRONMENT_NAME=tripbot-cicd LOCATION=eastus2 ./cicd/deploy.sh --skip-infra
+./cicd/deploy.sh --skip-infra
 ```
 
 **✅ Verify** — the script reports a **new version** for `trip-planner` and polls

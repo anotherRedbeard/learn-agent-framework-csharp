@@ -23,17 +23,19 @@
 #   Code change only:    ./cicd/deploy.sh --skip-infra
 #   Skip the RBAC grant: ./cicd/deploy.sh --skip-rbac   (if access is pre-granted)
 #
-# Override defaults via environment variables:
-#   ENVIRONMENT_NAME  (default: tripbot-cicd)
+# By DEFAULT this deploys INTO your existing Modules 1-11 Foundry account/project
+# (so the hosted agent sits next to the prompt agent). It reads:
+#   RESOURCE_GROUP    (default: rg-tripbot)
+#   ACCOUNT_NAME      (default: tripbot-foundry)   — your <name>-foundry account
+#   PROJECT_NAME      (default: tripbot-project)
 #   LOCATION          (default: eastus2)
 #   AGENT_NAME        (default: trip-planner)
+#   (Set ACCOUNT_NAME/PROJECT_NAME to match your infra/main.bicepparam. The
+#    repo-root infra/main.bicep must already be on the 2026-03-01 account API.)
 #
-# Deploy into an EXISTING Foundry project (so the hosted agent sits next to the
-# Modules 1-11 prompt agent) instead of a fresh standalone account:
-#   DEPLOY_TARGET=existing RESOURCE_GROUP=rg-tripbot LOCATION=eastus2 \
-#     ACCOUNT_NAME=tripbot-foundry PROJECT_NAME=tripbot-project ./cicd/deploy.sh
-#   (Redeploy the repo-root infra/main.bicep first - it must be on the 2026-03-01
-#    account API for the existing account to host containers.)
+# To create a COMPLETELY SEPARATE standalone account + resource group instead:
+#   DEPLOY_TARGET=standalone ./cicd/deploy.sh
+#   (override ENVIRONMENT_NAME, default: tripbot-cicd, to name the new stack)
 
 set -euo pipefail
 
@@ -52,8 +54,9 @@ AGENT_MEMORY="${AGENT_MEMORY:-0.5Gi}"
 API_VERSION="2025-11-15-preview"
 MAX_POLL_SECONDS="${MAX_POLL_SECONDS:-600}"
 
-# standalone (default) creates a fresh account; existing reuses tripbot-foundry.
-DEPLOY_TARGET="${DEPLOY_TARGET:-standalone}"
+# existing (default) reuses your Modules 1-11 Foundry account/project so the
+# hosted agent sits next to the prompt agent; standalone creates a fresh account.
+DEPLOY_TARGET="${DEPLOY_TARGET:-existing}"
 RESOURCE_GROUP="${RESOURCE_GROUP:-rg-tripbot}"
 ACCOUNT_NAME="${ACCOUNT_NAME:-tripbot-foundry}"
 PROJECT_NAME_PARAM="${PROJECT_NAME:-tripbot-project}"
