@@ -109,6 +109,27 @@ The agent starts on `http://localhost:8088`. Open `requests.http` and send the
 first request. You should get back a JSON envelope shaped like the OpenAI
 Responses API.
 
+> ⚠️ **Local RBAC — you need Foundry User at the *account* level.** On `dotnet
+> run` the agent calls the model as **your `az login` identity** (via
+> `DefaultAzureCredential`). Module 12 uses the **Responses API**, which is
+> evaluated at the **Foundry account** scope — not the project scope. If your
+> user only has **Foundry User** on the *project* (the default the base
+> `infra/main.bicep` grants), the call fails with **`HTTP 401 … lacks the
+> required data action …/OpenAI/responses/write`**. Grant Foundry User at the
+> **account** level once (it inherits down to the project, so Modules 1–11 keep
+> working):
+>
+> ```bash
+> ACCOUNT_ID=$(az cognitiveservices account show -g <your-rg> -n <name>-foundry --query id -o tsv)
+> az role assignment create \
+>   --assignee "$(az ad signed-in-user show --query id -o tsv)" \
+>   --role "53ca6127-db72-4b80-b1b0-d745d6d5456d" \
+>   --scope "$ACCOUNT_ID"
+> ```
+>
+> Wait 5–15 min for data-plane RBAC to propagate, then retry. (Role ID
+> `53ca6127-…` = **Foundry User**, formerly *Azure AI User*.)
+
 > **Note on config sources.** Unlike most modules in this repo, Module 12 reads
 > from `Environment.GetEnvironmentVariable` directly (not `IConfiguration`)
 > because `AgentHost.CreateBuilder` is purpose-built for hosted-agent
@@ -266,6 +287,11 @@ big advantage of the IaC path over a hand-rolled `az rest` POST, which would
 otherwise leave you chasing a `401` (deployer can't create the version) or a
 `500` `ManagedIdentityCredential` failure (agent identity can't call the model)
 on your own.
+
+> ℹ️ **This table is the *deployed* (cloud) agent.** Running the agent **locally**
+> with `dotnet run` is different — there it calls the model as *your* user, so
+> you need **Foundry User at the account level** yourself. See the
+> [Local RBAC callout in Step 2](#step-2--run-it-locally-with-dotnet-run).
 
 > **Role rename.** Foundry User / Foundry Project Manager were formerly *Azure
 > AI User* / *Azure AI Project Manager* — you may still see the old names in the
