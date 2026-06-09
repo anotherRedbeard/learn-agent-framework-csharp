@@ -191,12 +191,20 @@ docker run --rm -p 8088:8088 \
 ```
 
 **✅ Verify** — the logs show `Now listening on: http://[::]:8088`. Send a request
-from `requests.http`: the container accepts and processes it, then the **model
-call fails with `401 … PermissionDenied`** in the logs. That `401` is the
-**expected** result here — it proves the image builds, starts, and routes a
-request all the way to the model; the *only* thing missing is an identity, which
-Foundry provides in the cloud. For most learners, this is enough — move on to
-Step 4.
+from `requests.http`: the container accepts and processes it, then returns an
+**HTTP 200** envelope whose response is a **failure** with the message
+**`DefaultAzureCredential failed to retrieve a token …`** (the chain finds no
+EnvironmentCredential, no managed-identity endpoint, and no `az` CLI inside the
+container). That failure is the **expected** result here — it proves the image
+builds, starts, and routes a request all the way to the auth step; the *only*
+thing missing is an identity, which Foundry provides in the cloud. For most
+learners, this is enough — move on to Step 4.
+
+> 💡 **200, not 401.** The smoke test fails at *credential acquisition* (no token
+> available), so you get the `DefaultAzureCredential failed to retrieve a token`
+> message — not the `401 … PermissionDenied` you'd see when you *have* a token
+> but lack RBAC (the Step 2 / 3c case). Both mean "auth isn't wired up," just at
+> different stages.
 
 #### 3c. (Optional, advanced) Full invoke with a service principal
 
