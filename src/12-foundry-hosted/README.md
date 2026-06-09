@@ -302,12 +302,14 @@ the script orchestrates them):
 > It reuses the base account (redeployed on the `2026-03-01` API) and adds only
 > an ACR + the project's image-pull/model RBAC.
 
-#### 4a. Sign in and select your subscription
+#### 4a. Select your subscription
 
-**▶️ Do** — sign in and pick the subscription the stack should land in:
+You're already signed in from Steps 2–3 — just make sure the deploy lands in the
+right subscription.
+
+**▶️ Do** — set the target subscription:
 
 ```bash
-az login
 az account set --subscription <your-subscription-id>
 ```
 
@@ -319,11 +321,11 @@ az account show --query "{name:name, id:id}" -o table
 
 #### 4b. Run the deploy script
 
-**▶️ Do** — deploy the stack. A fresh `ENVIRONMENT_NAME` keeps these resources in
-their own resource group (`rg-<ENVIRONMENT_NAME>`), separate from Modules 1–11:
+**▶️ Do** — deploy the stack (run from `src/12-foundry-hosted`, where you already
+are). A fresh `ENVIRONMENT_NAME` keeps these resources in their own resource
+group (`rg-<ENVIRONMENT_NAME>`), separate from Modules 1–11:
 
 ```bash
-cd src/12-foundry-hosted
 ENVIRONMENT_NAME=tripbot-cicd LOCATION=eastus2 ./cicd/deploy.sh
 ```
 
