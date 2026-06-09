@@ -109,7 +109,11 @@ az deployment group create \
 ```
 
 **Step 2 — add the hosted-agent pieces + register the agent.** From
-`src/12-foundry-hosted`:
+`src/12-foundry-hosted`. `ACCOUNT_NAME` and `PROJECT_NAME` are **not** hardcoded
+— they're env vars. Set them to **your** base resources: the account is
+`<name>-foundry` where `<name>` and `projectName` are whatever you put in
+[`infra/main.bicepparam`](../../../infra/main.bicepparam) (the example below uses
+the repo defaults `name=tripbot` / `projectName=tripbot-project`).
 
 ```bash
 DEPLOY_TARGET=existing \
