@@ -328,26 +328,28 @@ az account show --query "{name:name, id:id}" -o table
 #### 4b. Run the deploy script
 
 **▶️ Do** — deploy the hosted agent into your existing Foundry (run from
-`src/12-foundry-hosted`, where you already are). Set `ACCOUNT_NAME`/`PROJECT_NAME`
-to match your [`infra/main.bicepparam`](../../infra/main.bicepparam) — the account
-is `<name>-foundry`:
+`src/12-foundry-hosted`, where you already are):
 
 ```bash
-RESOURCE_GROUP=rg-tripbot \
-ACCOUNT_NAME=tripbot-foundry \
-PROJECT_NAME=tripbot-project \
-LOCATION=eastus2 \
 ./cicd/deploy.sh
 ```
+
+> The script's built-in defaults (`RESOURCE_GROUP=rg-tripbot`,
+> `ACCOUNT_NAME=tripbot-foundry`, `PROJECT_NAME=tripbot-project`,
+> `LOCATION=eastus2`) match the base from earlier modules. If you named your base
+> differently in [`infra/main.bicepparam`](../../infra/main.bicepparam) (account =
+> `<name>-foundry`), **export** the matching values first, e.g.:
+> ```bash
+> export ACCOUNT_NAME=<name>-foundry PROJECT_NAME=<your-project>
+> ```
 
 > **Heads-up — permissions & timing.** Your account needs **Owner** (or
 > **Contributor + Role Based Access Control Administrator**) at the subscription
 > scope, because the script creates role assignments (and, for standalone, a
 > resource group). The first run takes ~5–10 minutes.
 
-**✅ Verify** — when the script finishes it prints the **project endpoint** and
-the **REST invoke URL**, and the agent version reports `active`. Copy both
-printed values — you'll use them in [Calling the deployed agent](#calling-the-deployed-agent).
+**✅ Verify** — when the script finishes the agent version reports `active`, and it
+prints the **REST invoke URL** you'll use in [Calling the deployed agent](#calling-the-deployed-agent).
 
 #### 4c. Redeploy after a code change (optional)
 
@@ -399,20 +401,23 @@ The deployed endpoint is **not** `https://{agent-host}/responses` like the local
 server. It's scoped under your project endpoint with an agent subpath, and the
 refreshed preview requires a feature header.
 
-**▶️ Do** — invoke the agent (use the `PROJECT_ENDPOINT` printed by `deploy.sh`):
+**▶️ Do** — invoke the agent. You already exported `AZURE_OPENAI_ENDPOINT` (your
+project endpoint) back in the earlier modules, so just reuse it:
 
 ```bash
-# Both values are printed at the end of deploy.sh
-PROJECT_ENDPOINT="https://<account>.services.ai.azure.com/api/projects/trip-project"
+# AZURE_OPENAI_ENDPOINT is your project endpoint, exported per docs/prerequisites.md
 TOKEN=$(az account get-access-token --resource https://ai.azure.com/ --query accessToken -o tsv)
 
 curl -sS -X POST \
-  "$PROJECT_ENDPOINT/agents/trip-planner/endpoint/protocols/openai/responses?api-version=2025-11-15-preview" \
+  "$AZURE_OPENAI_ENDPOINT/agents/trip-planner/endpoint/protocols/openai/responses?api-version=2025-11-15-preview" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Foundry-Features: HostedAgents=V1Preview" \
   -H "Content-Type: application/json" \
   -d '{"input":"Plan a 3-day trip to Tokyo.","model":"trip-planner","store":true}'
 ```
+
+> ℹ️ The variable is named `AZURE_OPENAI_ENDPOINT` (a slight misnomer), but it
+> holds the project endpoint and works here — no need to re-save it.
 
 **✅ Verify** — you get back a JSON Responses envelope containing a Tokyo itinerary.
 
@@ -422,14 +427,6 @@ curl -sS -X POST \
 **▶️ Do (alternative) — test in the portal** instead of curl: open
 [ai.azure.com](https://ai.azure.com), go to your project → **Agents**, click
 `trip-planner` to chat and to see its endpoint URL, container image, and live logs.
-
-### Gotcha on your first invoke — provisioning lag
-
-The *first* hosted agent you deploy triggers Foundry to provision the managed
-runtime behind the scenes. The agent version flips to `active` several minutes
-*before* its endpoint is actually reachable, so an early invoke can return
-`HTTP 404 "Subdomain does not map to a resource"`. This is normal first-deploy
-timing — wait a few minutes and retry. Subsequent deploys don't have this lag.
 
 ### Alternative — deploy with `azd` (local dev convenience)
 
