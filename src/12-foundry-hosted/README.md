@@ -158,21 +158,75 @@ Responses API.
 
 > ℹ️ **Optional.** The deploy path in Step 4 builds the image remotely with
 > `az acr build`, so you don't need a working local container to ship. Use this
-> step only if you want to validate the image build itself.
+> step to validate the image build and to exercise the container exactly as
+> Foundry will run it.
+
+#### 3a. Build the image
+
+**▶️ Do** — build the runtime image (the `Dockerfile` publishes the app and
+exposes `8088`):
 
 ```bash
-# Build the image
+cd src/12-foundry-hosted
 docker build -t trip-planner:local .
 ```
 
-> **Heads-up on local container auth.** `Program.cs` now uses
-> `DefaultAzureCredential` only (matching the canonical hello-world sample — the
-> old `AZURE_BEARER_TOKEN` / `StaticTokenCredential` shim was removed). A bare
-> `docker run` has no `az login`, no managed-identity endpoint, and no token
-> cache, so the agent can't authenticate to Foundry from inside the container.
-> In production Foundry assigns the hosted agent its own **managed identity**,
-> which `DefaultAzureCredential` picks up automatically. For local validation,
-> prefer `dotnet run` (Step 2), which runs under your `az login` identity.
+**✅ Verify** — the build finishes with `naming to docker.io/library/trip-planner:local`.
+
+#### 3b. Run the container
+
+Inside a container there's **no `az login`, no managed-identity endpoint, and no
+token cache**, so `DefaultAzureCredential` has nothing to use and model calls
+fail with `401`. In the cloud Foundry injects a **managed identity** for the
+agent; locally you stand in for it with a **service principal**, which
+`DefaultAzureCredential` picks up from `AZURE_CLIENT_ID` / `AZURE_TENANT_ID` /
+`AZURE_CLIENT_SECRET` (the first leg of its chain) — **no code change required.**
+
+**▶️ Do** — create a service principal once and grant it **Foundry User at the
+account scope** (same role the Step 2 local run needs):
+
+```bash
+ACCOUNT_ID=$(az cognitiveservices account show -g <your-rg> -n <name>-foundry --query id -o tsv)
+
+az ad sp create-for-rbac --name trip-planner-local \
+  --role "53ca6127-db72-4b80-b1b0-d745d6d5456d" \
+  --scopes "$ACCOUNT_ID"
+# -> prints appId (AZURE_CLIENT_ID), password (AZURE_CLIENT_SECRET), tenant (AZURE_TENANT_ID)
+```
+
+```bash
+# Paste the three values from the output above
+export AZURE_CLIENT_ID=<appId>
+export AZURE_CLIENT_SECRET=<password>
+export AZURE_TENANT_ID=<tenant>
+```
+
+**▶️ Do** — run the container, passing the agent's config **and** the SP creds
+(reuses `AZURE_OPENAI_ENDPOINT` / `AZURE_OPENAI_DEPLOYMENT_NAME` from your shell):
+
+```bash
+docker run --rm -p 8088:8088 \
+  -e AZURE_OPENAI_ENDPOINT="$AZURE_OPENAI_ENDPOINT" \
+  -e AZURE_OPENAI_DEPLOYMENT_NAME="$AZURE_OPENAI_DEPLOYMENT_NAME" \
+  -e AGENT_NAME=trip-planner \
+  -e AZURE_CLIENT_ID="$AZURE_CLIENT_ID" \
+  -e AZURE_TENANT_ID="$AZURE_TENANT_ID" \
+  -e AZURE_CLIENT_SECRET="$AZURE_CLIENT_SECRET" \
+  trip-planner:local
+```
+
+**✅ Verify** — the container logs `Now listening on: http://[::]:8088`; send the
+same request from `requests.http` (it targets `localhost:8088`) and you get back
+a Responses envelope — just like Step 2, but served from the container.
+
+> 🔐 **Notes.**
+> - The SP needs **5–15 min** for its account-scope role to propagate before the
+>   first call succeeds (same data-plane lag as Step 2).
+> - The client secret is a credential — keep it in your shell, **don't commit it**.
+>   Clean up when done: `az ad sp delete --id "$AZURE_CLIENT_ID"`.
+> - No permission to create app registrations in your tenant? Skip the container
+>   auth path and validate with `dotnet run` (Step 2) under your `az login`
+>   identity instead.
 
 ---
 
