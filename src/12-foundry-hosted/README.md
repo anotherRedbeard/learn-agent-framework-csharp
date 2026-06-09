@@ -355,38 +355,32 @@ it to `active`. The previous version stays addressable until the new one rolls o
 > the resource breakdown, the CI/OIDC setup, the deploy flags and model/region
 > parameters, and image-pull troubleshooting.
 
-### Identity & RBAC — handled for you
+### Identity & RBAC — handled by the deploy script
 
-A hosted agent authenticates to Azure as a **managed identity** when its
-container pulls its image, calls the model, reads session history, or hits any
-other resource. In this standalone stack the agent runs as the **Foundry
-project's system-assigned identity**, and the Bicep wires up everything it needs:
+A hosted agent calls the model as a **managed identity** — but **not** the
+project's. Foundry v2 gives each hosted agent its own **per-agent instance
+identity**, created when the version is built, and *that* is what calls the
+model. The Bicep can't grant it ahead of time (it doesn't exist yet), so
+`deploy.sh` resolves it once the version is `active` and grants it **Foundry
+User on the account**. Skip that and every invoke returns
+`HTTP 401 … /OpenAI/responses/write`.
 
-| Role | Assignee | Scope | Why |
+| Role | Assignee | Scope | Wired by |
 | --- | --- | --- | --- |
-| **AcrPull** | project identity | the ACR | pull the agent image |
-| **Foundry User** | project identity | the Foundry account | call the model endpoint |
-| **Foundry Project Manager** | you (the deployer) | the project | create agent versions |
+| **AcrPull** | project identity | the ACR | Bicep |
+| **Foundry Project Manager** | you (the deployer) | the project | `deploy.sh` |
+| **Foundry User** | **agent instance identity** | the Foundry account | `deploy.sh` |
 
-That's the whole RBAC story — there's nothing to fix up afterwards. This is the
-big advantage of the IaC path over a hand-rolled `az rest` POST, which would
-otherwise leave you chasing a `401` (deployer can't create the version) or a
-`500` `ManagedIdentityCredential` failure (agent identity can't call the model)
-on your own.
+> ⏱️ **Propagation.** That grant needs **5–15 min** to take effect. A `401
+> PermissionDenied` on your *first* invoke right after deploy is usually just
+> propagation lag — wait and retry.
 
-> ℹ️ **This table is the *deployed* (cloud) agent.** Running the agent **locally**
-> with `dotnet run` is different — there it calls the model as *your* user, so
-> you need **Foundry User at the account level** yourself. See the
+> ℹ️ **Local run is different.** With `dotnet run` the agent calls the model as
+> *your* user, so *you* need Foundry User at the account level — see the
 > [Local RBAC callout in Step 2](#step-2--run-it-locally-with-dotnet-run).
 
 > **Role rename.** Foundry User / Foundry Project Manager were formerly *Azure
-> AI User* / *Azure AI Project Manager* — you may still see the old names in the
-> portal. The role IDs and permissions are unchanged.
->
-> **Wiring up downstream resources** (Key Vault, Storage, AI Search, …)? Grant
-> them to the **same project identity** by extending
-> [`cicd/infra/modules/foundry-project.bicep`](cicd/infra/modules/foundry-project.bicep)
-> with the role assignment, so it stays reproducible.
+> AI User* / *Azure AI Project Manager* — the IDs and permissions are unchanged.
 
 ### Calling the deployed agent
 

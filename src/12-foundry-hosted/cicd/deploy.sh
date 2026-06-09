@@ -8,6 +8,8 @@
 #   3. Builds + pushes the agent image with `az acr build` (no local Docker).
 #   4. Registers a new hosted-agent version via the Foundry data-plane REST API.
 #   5. Polls until the version is `active`.
+#   6. Grants the agent's per-agent "instance identity" Foundry User on the
+#      account so the running container can call the model.
 #
 # Prerequisites:
 #   - az login  (a user, OR a service principal already logged in for CI)
@@ -265,6 +267,93 @@ while :; do
   fi
   sleep 10
 done
+
+# ── Step 7: Grant the agent's instance identity model access ──────────────────
+# Foundry v2 hosted agents do NOT run as the project managed identity — each
+# agent gets its own "instance identity" (a per-agent managed identity created
+# when the version is built). That principal — not the project — is what calls
+# the model, so it needs Foundry User on the account or every invoke returns
+# HTTP 401 (.../OpenAI/responses/write). The identity exists only after the
+# version is active, so we resolve and grant it here. Re-runs are idempotent and
+# a new version's identity (e.g. after --skip-infra) is picked up automatically.
+if [ "$SKIP_RBAC" = true ]; then
+  echo "==> Skipping agent-identity RBAC grant (--skip-rbac)."
+else
+  ACCOUNT_ID="${PROJECT_ID%/projects/*}"
+  if [ "${ACCOUNT_ID}" = "${PROJECT_ID}" ] || [ -z "${ACCOUNT_ID}" ]; then
+    echo "ERROR: could not derive the account id from project id '${PROJECT_ID}'." >&2
+    exit 1
+  fi
+
+  # Foundry can take a moment to project the instance identity after the version
+  # reports active, so poll for it instead of trusting a single GET.
+  echo "==> Resolving the agent instance identity..."
+  AGENT_PRINCIPAL_ID=""
+  IDENTITY_DEADLINE=$(( $(date +%s) + 120 ))
+  while :; do
+    AGENT_BODY=$(curl -s \
+      "${PROJECT_ENDPOINT}/agents/${AGENT_NAME}?api-version=${API_VERSION}" \
+      -H "Authorization: Bearer ${FOUNDRY_TOKEN}" \
+      -H "Foundry-Features: HostedAgents=V1Preview" \
+      -w $'\n__HTTP_STATUS__%{http_code}' || true)
+    IDENTITY_STATUS=$(echo "${AGENT_BODY}" | sed -n 's/^__HTTP_STATUS__//p')
+    IDENTITY_JSON=$(echo "${AGENT_BODY}" | sed '/^__HTTP_STATUS__/d')
+    AGENT_PRINCIPAL_ID=$(echo "${IDENTITY_JSON}" | python3 -c "
+import sys, json
+def pid(o):
+    if not isinstance(o, dict):
+        return ''
+    ii = o.get('instance_identity')
+    return ii.get('principal_id', '') if isinstance(ii, dict) else ''
+try:
+    d = json.load(sys.stdin)
+except Exception:
+    print(''); sys.exit()
+out = ''
+if isinstance(d, dict):
+    v = d.get('versions')
+    if isinstance(v, dict):
+        out = pid(v.get('latest'))
+    if not out:
+        out = pid(d)
+print(out)
+" 2>/dev/null || true)
+    [ -n "${AGENT_PRINCIPAL_ID}" ] && break
+    if [ "$(date +%s)" -ge "${IDENTITY_DEADLINE}" ]; then break; fi
+    sleep 10
+  done
+
+  if [ -z "${AGENT_PRINCIPAL_ID}" ]; then
+    echo "WARNING: could not resolve the agent instance identity (last HTTP ${IDENTITY_STATUS:-?})." >&2
+    echo "         The agent will return HTTP 401 on invoke until you grant it manually:" >&2
+    echo "         az role assignment create --role 53ca6127-db72-4b80-b1b0-d745d6d5456d \\" >&2
+    echo "           --assignee-object-id <agent-principal-id> --assignee-principal-type ServicePrincipal \\" >&2
+    echo "           --scope ${ACCOUNT_ID}" >&2
+    echo "         (find <agent-principal-id> in the agent JSON under instance_identity.principal_id)" >&2
+  else
+    ROLE_FOUNDRY_USER="53ca6127-db72-4b80-b1b0-d745d6d5456d"  # Foundry User
+    EXISTING_USER=$(az role assignment list --assignee "${AGENT_PRINCIPAL_ID}" --role "${ROLE_FOUNDRY_USER}" --scope "${ACCOUNT_ID}" --query "[].id" -o tsv 2>/dev/null || true)
+    if [ -n "${EXISTING_USER}" ]; then
+      echo "==> Agent instance identity already has Foundry User on the account."
+    else
+      echo "==> Granting Foundry User to the agent instance identity at account scope..."
+      if ! az role assignment create \
+        --role "${ROLE_FOUNDRY_USER}" \
+        --assignee-object-id "${AGENT_PRINCIPAL_ID}" \
+        --assignee-principal-type ServicePrincipal \
+        --scope "${ACCOUNT_ID}" \
+        --output none; then
+        echo "ERROR: failed to grant Foundry User to the agent identity at:" >&2
+        echo "         ${ACCOUNT_ID}" >&2
+        echo "       You need Owner or Role Based Access Control Administrator on that" >&2
+        echo "       account. Re-run with --skip-rbac after granting it, or run the grant" >&2
+        echo "       manually for principal ${AGENT_PRINCIPAL_ID}." >&2
+        exit 1
+      fi
+      echo "    Granted. Allow 5-15 min for data-plane RBAC to propagate before the first invoke."
+    fi
+  fi
+fi
 
 echo ""
 echo "Done. Agent '${AGENT_NAME}' (v${AGENT_VERSION}) is active on project '${PROJECT_NAME}'."

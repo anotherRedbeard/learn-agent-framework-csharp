@@ -26,10 +26,13 @@ resource aiAccount 'Microsoft.CognitiveServices/accounts@2026-03-01' existing = 
   name: aiServicesAccountName
 }
 
-// The Foundry project — scoped under the AI Services account. Its
-// system-assigned identity is the principal that the hosted agent container
-// runs as: it pulls the image (via AcrPull, granted in acr.bicep) and calls
-// the model endpoint (via the Foundry User role, granted below).
+// The Foundry project — scoped under the AI Services account. It has its own
+// system-assigned identity, but note that a *hosted agent* does NOT run as the
+// project identity: Foundry v2 gives each hosted agent its own per-agent
+// "instance identity", which is granted Foundry User on the account by
+// deploy.sh after the agent version is created. This project identity still
+// backs project-level operations (e.g. the AcrPull grant in acr.bicep and the
+// Log Analytics Reader grant below).
 resource project 'Microsoft.CognitiveServices/accounts/projects@2026-03-01' = {
   parent: aiAccount
   name: aiFoundryProjectName
@@ -44,10 +47,12 @@ resource project 'Microsoft.CognitiveServices/accounts/projects@2026-03-01' = {
   }
 }
 
-// Foundry User for the project managed identity. The Foundry runtime injects
-// FOUNDRY_PROJECT_ENDPOINT into the container; this role is what allows that
-// endpoint to be called with the container's managed identity. Without it the
-// container gets a 401 when it tries to call the model.
+// Foundry User for the PROJECT managed identity, scoped to the account. This
+// covers project-level/runtime operations that run as the project identity.
+// It does NOT cover the hosted agent's model calls — those run as the agent's
+// per-agent instance identity, which deploy.sh grants Foundry User separately
+// (see Step 7 in cicd/deploy.sh). Without that per-agent grant the container
+// gets a 401 on the first /openai/v1/responses call.
 resource foundryUserRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   scope: aiAccount
   name: guid(resourceGroup().id, aiFoundryProjectName, '53ca6127-db72-4b80-b1b0-d745d6d5456d')
