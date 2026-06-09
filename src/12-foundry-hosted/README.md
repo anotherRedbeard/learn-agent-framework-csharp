@@ -428,7 +428,14 @@ curl -sS -X POST \
 [ai.azure.com](https://ai.azure.com), go to your project → **Agents**, click
 `trip-planner` to chat and to see its endpoint URL, container image, and live logs.
 
-### Alternative — deploy with `azd` (local dev convenience)
+---
+
+## Alternative deploy path — use `azd` instead of `deploy.sh`
+
+> ⛔ **This is an *alternative* to the entire Step 4 above, not an extra step.**
+> If `./cicd/deploy.sh` already deployed your agent, you're **done** — skip this
+> section. It's here only to show how the *same* agent could be shipped with
+> `azd` instead of the Bicep + REST path, and why this course doesn't use it.
 
 Prefer an interactive CLI for quick experiments? `azd` can scaffold and deploy
 the same agent. It's handy for a one-off local loop, but it's **not** the
