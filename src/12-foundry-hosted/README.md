@@ -157,9 +157,10 @@ Responses API.
 ## Step 3 — Run it as a container (optional)
 
 > ℹ️ **Optional.** The deploy path in Step 4 builds the image remotely with
-> `az acr build`, so you don't need a working local container to ship. Use this
-> step to validate the image build and to exercise the container exactly as
-> Foundry will run it.
+> `az acr build`, so you don't need a working local container to ship. **3a–3b**
+> (build + a no-auth smoke test) validate the image and are enough for most
+> learners; **3c** is an optional advanced path that wires up real auth so the
+> container returns a live trip plan.
 
 #### 3a. Build the image
 
@@ -173,14 +174,36 @@ docker build -t trip-planner:local .
 
 **✅ Verify** — the build finishes with `naming to docker.io/library/trip-planner:local`.
 
-#### 3b. Run the container
+#### 3b. Smoke-test the container (no credentials)
 
-Inside a container there's **no `az login`, no managed-identity endpoint, and no
-token cache**, so `DefaultAzureCredential` has nothing to use and model calls
-fail with `401`. In the cloud Foundry injects a **managed identity** for the
-agent; locally you stand in for it with a **service principal**, which
-`DefaultAzureCredential` picks up from `AZURE_CLIENT_ID` / `AZURE_TENANT_ID` /
-`AZURE_CLIENT_SECRET` (the first leg of its chain) — **no code change required.**
+The quickest check: does the image **build, start, and serve**? You don't need
+working auth for that — Foundry supplies the agent's identity in the cloud
+(Step 4). The agent still needs its endpoint/model config to boot, so pass those:
+
+**▶️ Do** — run the image with just the agent config (no Azure creds):
+
+```bash
+docker run --rm -p 8088:8088 \
+  -e AZURE_OPENAI_ENDPOINT="$AZURE_OPENAI_ENDPOINT" \
+  -e AZURE_OPENAI_DEPLOYMENT_NAME="$AZURE_OPENAI_DEPLOYMENT_NAME" \
+  -e AGENT_NAME=trip-planner \
+  trip-planner:local
+```
+
+**✅ Verify** — the logs show `Now listening on: http://[::]:8088`. Send a request
+from `requests.http`: the container accepts and processes it, then the **model
+call fails with `401 … PermissionDenied`** in the logs. That `401` is the
+**expected** result here — it proves the image builds, starts, and routes a
+request all the way to the model; the *only* thing missing is an identity, which
+Foundry provides in the cloud. For most learners, this is enough — move on to
+Step 4.
+
+#### 3c. (Optional, advanced) Full invoke with a service principal
+
+Want the container to actually return a trip plan locally? Stand in for the
+cloud managed identity with a **service principal** — `DefaultAzureCredential`
+picks it up from `AZURE_CLIENT_ID` / `AZURE_TENANT_ID` / `AZURE_CLIENT_SECRET`
+(the first leg of its chain), so **no code change is required.**
 
 **▶️ Do** — create a service principal once and grant it **Foundry User at the
 account scope** (same role the Step 2 local run needs):
@@ -201,8 +224,7 @@ export AZURE_CLIENT_SECRET=<password>
 export AZURE_TENANT_ID=<tenant>
 ```
 
-**▶️ Do** — run the container, passing the agent's config **and** the SP creds
-(reuses `AZURE_OPENAI_ENDPOINT` / `AZURE_OPENAI_DEPLOYMENT_NAME` from your shell):
+**▶️ Do** — run the container with the same config **plus** the SP creds:
 
 ```bash
 docker run --rm -p 8088:8088 \
@@ -215,18 +237,18 @@ docker run --rm -p 8088:8088 \
   trip-planner:local
 ```
 
-**✅ Verify** — the container logs `Now listening on: http://[::]:8088`; send the
-same request from `requests.http` (it targets `localhost:8088`) and you get back
-a Responses envelope — just like Step 2, but served from the container.
+**✅ Verify** — send the same `requests.http` request and you get back a Responses
+envelope (a real trip plan) — just like Step 2, but served from the container.
 
 > 🔐 **Notes.**
 > - The SP needs **5–15 min** for its account-scope role to propagate before the
 >   first call succeeds (same data-plane lag as Step 2).
 > - The client secret is a credential — keep it in your shell, **don't commit it**.
 >   Clean up when done: `az ad sp delete --id "$AZURE_CLIENT_ID"`.
-> - No permission to create app registrations in your tenant? Skip the container
->   auth path and validate with `dotnet run` (Step 2) under your `az login`
->   identity instead.
+> - While `AZURE_CLIENT_*` stays exported, a later `dotnet run` (Step 2) also
+>   authenticates as the SP. `unset` them to go back to your `az login` identity.
+> - No permission to create app registrations in your tenant? Skip 3c — the 3b
+>   smoke test plus `dotnet run` (Step 2) already validate everything you need.
 
 ---
 
