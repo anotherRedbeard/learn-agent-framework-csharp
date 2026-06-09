@@ -511,7 +511,7 @@ is fine for the lesson). Ask the agent for an itinerary "with costs in EUR"
 and confirm it calls the tool. This proves the **same** tool plumbing from
 Modules 02 and 07 still works inside a Foundry-hosted container.
 
-### Stretch — Lift the weather agent into a second container
+### 🔴 Stretch — Lift the weather agent into a second container
 
 Module 10's `weather` agent is still self-hosted. Create
 `src/12-foundry-hosted-weather/` (copy this folder), change the agent name,
